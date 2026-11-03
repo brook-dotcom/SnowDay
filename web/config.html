@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Snow Day</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* Windows 11 style settings: one cool grey family, one blue accent, radii 4 / 6 / 8 */
+  :root {
+    --bg: #f3f4f6; --surface: #ffffff; --hover: #f6f7f9; --line: #e2e5e9; --control: #d7dbe0; --well: #eceef1;
+    --ink: #1b1f24; --mute: #59616c; --faint: #6b737e;
+    --accent: #1f72b8; --accent-hover: #1a64a3; --on-accent: #ffffff;
+    --thumb: #ffffff; --thumb-ring: rgba(0,0,0,0.18);
+    --r-sm: 4px; --r-md: 6px; --r-lg: 8px;
+    --ease: cubic-bezier(0.23, 1, 0.32, 1);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1f24; --surface: #262a31; --hover: #2c3139; --line: #343a43; --control: #474e59; --well: #20242a;
+      --ink: #eceff3; --mute: #a9b1bc; --faint: #8b939f;
+      --accent: #4aa3df; --accent-hover: #63b1e6; --on-accent: #0b1a26;
+      --thumb: #eef1f5; --thumb-ring: rgba(0,0,0,0.35);
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overflow: hidden;
+    font: 14px/20px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; user-select: none; }
+  button, select, input { font: inherit; color: inherit; }
+  :focus { outline: none; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
+  svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+  .app { height: 100vh; display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+  .main { display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(0, 1fr); gap: 24px; padding: 16px 24px 0; min-height: 0; }
+
+  /* left: brand, live preview, scenes */
+  .left { display: flex; flex-direction: column; min-height: 0; }
+  .brand { display: flex; align-items: center; gap: 12px; height: 40px; margin-bottom: 12px; }
+  .brand img { width: 36px; height: 36px; border-radius: var(--r-lg); }
+  .brand h1 { margin: 0; font: 600 20px/28px "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; }
+  .preview { position: relative; aspect-ratio: 16 / 8.6; border-radius: var(--r-lg); overflow: hidden; background: #0d1a2b; box-shadow: 0 0 0 1px var(--line); flex: none; }
+  .preview iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; pointer-events: none; }
+  /* controls sitting on the picture keep a dark scrim in both themes */
+  .over { position: absolute; top: 10px; display: flex; align-items: center; height: 30px; padding: 3px; gap: 2px; border-radius: var(--r-md);
+    background: rgba(18,22,28,0.72); backdrop-filter: blur(6px); color: #eef1f5; box-shadow: 0 0 0 1px rgba(255,255,255,0.08); }
+  .over.pick { left: 10px; padding: 0; }
+  .over.speed { right: 10px; }
+  .over select { appearance: none; -webkit-appearance: none; border: 0; background: transparent; color: #eef1f5; height: 30px; padding: 0 30px 0 12px; font-size: 12px; font-weight: 600; cursor: pointer; border-radius: var(--r-md); }
+  .over select option { background: #262a31; color: #eceff3; }
+  .over .chev { position: absolute; right: 10px; pointer-events: none; width: 12px; height: 12px; }
+  .over button { border: 0; background: transparent; color: rgba(238,241,245,0.8); height: 24px; min-width: 32px; padding: 0 8px; border-radius: var(--r-sm); font-size: 12px; font-weight: 600; cursor: pointer;
+    display: grid; place-items: center; font-variant-numeric: tabular-nums; transition: background .12s var(--ease), color .12s var(--ease); }
+  .over button:hover { color: #fff; background: rgba(255,255,255,0.08); }
+  .over button.on { background: var(--accent); color: var(--on-accent); }
+  .over button svg { width: 12px; height: 12px; fill: currentColor; stroke: none; }
+
+  .label { color: var(--mute); font-size: 12px; font-weight: 600; line-height: 16px; margin: 14px 0 6px; }
+  .scenes { display: grid; grid-template-columns: 1fr 1fr; grid-auto-flow: column; grid-template-rows: repeat(7, 28px); column-gap: 8px;
+    background: var(--surface); border-radius: var(--r-lg); box-shadow: 0 0 0 1px var(--line); padding: 6px; }
+  .scene { display: flex; align-items: center; gap: 10px; padding: 0 8px; border-radius: var(--r-sm); cursor: pointer; min-width: 0; transition: background .12s var(--ease); }
+  .scene:hover { background: var(--hover); }
+  .scene .box { width: 16px; height: 16px; border-radius: var(--r-sm); box-shadow: inset 0 0 0 1.5px var(--faint); display: grid; place-items: center; flex: none; transition: background .12s var(--ease); }
+  .scene .box svg { width: 10px; height: 10px; stroke: var(--on-accent); stroke-width: 2.2; fill: none; opacity: 0; }
+  .scene.on .box { background: var(--accent); box-shadow: none; }
+  .scene.on .box svg { opacity: 1; }
+  .scene .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+  .scene .i { color: var(--mute); }
+  .scene:not(.on) .nm, .scene:not(.on) .i { color: var(--faint); }
+  .scene small { flex: none; font-size: 11px; line-height: 16px; color: var(--mute); background: var(--well); padding: 0 6px; border-radius: var(--r-sm); }
+  .play { margin-top: 10px; height: 34px; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; border: 0; border-radius: var(--r-md);
+    background: var(--surface); box-shadow: 0 0 0 1px var(--line); cursor: pointer; font-size: 13px; transition: background .12s var(--ease), transform .12s var(--ease); flex: none; }
+  .play:hover { background: var(--hover); }
+  .play:active, .btn:active { transform: scale(0.97); }
+  .play svg { width: 12px; height: 12px; fill: currentColor; stroke: none; }
+
+  /* right: grouped settings */
+  .right { min-height: 0; overflow-y: auto; padding: 1px 6px 2px 2px; margin-right: -6px; }
+  .right::-webkit-scrollbar { width: 6px; } .right::-webkit-scrollbar-thumb { background: var(--control); border-radius: var(--r-sm); }
+  h2 { margin: 0 0 4px; font: 600 14px/20px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+  .group + h2 { margin-top: 10px; }
+  .group { background: var(--surface); border-radius: var(--r-lg); box-shadow: 0 0 0 1px var(--line); }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 32px; padding: 3px 14px; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row .t { min-width: 0; }
+  .row .t span { display: block; }
+  .row .t small { display: block; color: var(--mute); font-size: 12px; line-height: 16px; }
+  .ctl { display: flex; align-items: center; gap: 10px; flex: none; }
+
+  /* slider */
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 132px; height: 20px; background: transparent; cursor: pointer; margin: 0; }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent) var(--p, 50%), var(--control) var(--p, 50%)); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -7px; border-radius: 50%; background: var(--thumb);
+    box-shadow: 0 0 0 1px var(--thumb-ring), inset 0 0 0 4px var(--thumb), inset 0 0 0 9px var(--accent); transition: box-shadow .12s var(--ease); }
+  input[type=range]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 1px var(--thumb-ring), inset 0 0 0 3px var(--thumb), inset 0 0 0 9px var(--accent); }
+  output { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; color: var(--mute); font-size: 13px; }
+
+  /* segmented */
+  .seg { display: flex; padding: 2px; gap: 2px; border-radius: var(--r-md); background: var(--well); box-shadow: inset 0 0 0 1px var(--line); }
+  .seg button { border: 0; background: transparent; height: 26px; padding: 0 12px; border-radius: var(--r-sm); font-size: 13px; color: var(--mute); cursor: pointer;
+    transition: background .12s var(--ease), color .12s var(--ease); white-space: nowrap; }
+  .seg button:hover { color: var(--ink); }
+  .seg button.on { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+
+  /* dropdown */
+  .sel { position: relative; display: flex; align-items: center; }
+  .sel select { appearance: none; -webkit-appearance: none; height: 30px; min-width: 156px; padding: 0 32px 0 10px; border: 0; border-radius: var(--r-md); cursor: pointer;
+    background: var(--well); box-shadow: inset 0 0 0 1px var(--line); font-size: 13px; }
+  .sel select:hover { background: var(--hover); }
+  .sel svg { position: absolute; right: 10px; width: 12px; height: 12px; pointer-events: none; color: var(--mute); }
+
+  /* toggle switch */
+  .sw { position: relative; width: 40px; height: 20px; flex: none; }
+  .sw input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+  .sw span { position: absolute; inset: 0; border-radius: 10px; box-shadow: inset 0 0 0 1.5px var(--faint); transition: background .15s var(--ease), box-shadow .15s var(--ease); pointer-events: none; }
+  .sw span::after { content: ""; position: absolute; width: 12px; height: 12px; left: 4px; top: 4px; border-radius: 50%; background: var(--mute); transition: transform .15s var(--ease), background .15s var(--ease); }
+  .sw input:checked + span { background: var(--accent); box-shadow: none; }
+  .sw input:checked + span::after { transform: translateX(20px); background: var(--on-accent); }
+  .sw input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* footer */
+  .foot { display: flex; align-items: center; gap: 8px; padding: 10px 24px 12px; margin-top: 10px; border-top: 1px solid var(--line); }
+  .ver { color: var(--faint); font-size: 12px; margin-right: auto; font-variant-numeric: tabular-nums; transition: color .2s var(--ease); }
+  .ver.flash { color: var(--accent); }
+  .btn { border: 0; height: 32px; padding: 0 16px; border-radius: var(--r-md); cursor: pointer; font-size: 14px; transition: background .12s var(--ease), transform .12s var(--ease); }
+  .btn.text { background: transparent; color: var(--mute); }
+  .btn.text:hover { background: var(--hover); color: var(--ink); }
+  .btn.primary { background: var(--accent); color: var(--on-accent); font-weight: 600; min-width: 96px; }
+  .btn.primary:hover { background: var(--accent-hover); }
+
+  @media (max-width: 760px) { html, body { overflow: auto; } .app { height: auto; } .main { grid-template-columns: 1fr; } .right { overflow: visible; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-tree" viewBox="0 0 16 16"><path d="M8 1.5 12 6.5h-2l3 4H3l3-4H4z"/><path d="M8 10.5v4"/></symbol>
+    <symbol id="i-parade" viewBox="0 0 16 16"><path d="M6 14.5V5.5a3 3 0 0 1 6 0V7"/><path d="M6 8.5l2.5-1.5M6 11.5l2.5-1.5"/></symbol>
+    <symbol id="i-ramp" viewBox="0 0 16 16"><path d="M1.5 12h10a3 3 0 0 0 3-3"/><path d="M3.5 8.5h8M5 8.5V12M10 8.5V12"/></symbol>
+    <symbol id="i-ice" viewBox="0 0 16 16"><path d="M4 2.5h4v5h3.5a1.5 1.5 0 0 1 1.5 1.5v1.5H4z"/><path d="M2.5 13.5h12"/></symbol>
+    <symbol id="i-igloo" viewBox="0 0 16 16"><path d="M1.5 13a6.5 6.5 0 0 1 13 0z"/><path d="M6.5 13v-1.8a1.5 1.5 0 0 1 3 0V13M3.4 9.5h9.2M5.5 7v2.5M10.5 7v2.5"/></symbol>
+    <symbol id="i-fishing" viewBox="0 0 16 16"><path d="M10.5 1.5v8.5a3 3 0 0 1-6 0V8.5l-1.5 1.5"/><path d="M10.5 1.5 13 3"/></symbol>
+    <symbol id="i-blizzard" viewBox="0 0 16 16"><path d="M1.5 5.5h8a2 2 0 1 0-2-2"/><path d="M1.5 10.5h10a2 2 0 1 1-2 2"/><path d="M1.5 8h5"/></symbol>
+    <symbol id="i-flying" viewBox="0 0 16 16"><ellipse cx="8" cy="6" rx="4" ry="4.5"/><path d="M8 10.5c-1 1.5 0 2.5-.5 4"/></symbol>
+    <symbol id="i-snowman" viewBox="0 0 16 16"><circle cx="8" cy="5" r="2.5"/><circle cx="8" cy="11" r="3.5"/></symbol>
+    <symbol id="i-reindeer" viewBox="0 0 16 16"><ellipse cx="8" cy="11.5" rx="2.5" ry="3"/><path d="M6.5 9 4 6V2.5M4 5 2 4M9.5 9 12 6V2.5M12 5l2-1"/></symbol>
+    <symbol id="i-parkour" viewBox="0 0 16 16"><rect x="1.5" y="5.5" width="9" height="8" rx="1"/><path d="M4.5 5.5V3.5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-3"/></symbol>
+    <symbol id="i-snowball" viewBox="0 0 16 16"><circle cx="10" cy="8" r="4.5"/><path d="M1.5 6h3M1 9h3.5M2 12h3"/></symbol>
+    <symbol id="i-zipline" viewBox="0 0 16 16"><path d="M1.5 3 14.5 8"/><path d="M8.5 5.5v4M6.5 9.5h4"/></symbol>
+    <symbol id="i-tug" viewBox="0 0 16 16"><path d="M1 8c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0"/><circle cx="8" cy="8" r="1.6"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 12 12"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 10 10"><path d="M1.8 5.2 4 7.4l4.2-4.8"/></symbol>
+    <symbol id="i-play" viewBox="0 0 12 12"><path d="M3 1.8v8.4L10 6z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 12 12"><rect x="2.5" y="2" width="2.5" height="8" rx=".5"/><rect x="7" y="2" width="2.5" height="8" rx=".5"/></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+  <div class="main">
+    <section class="left">
+      <div class="brand"><img src="icon.png" alt=""><h1>Snow Day</h1></div>
+      <div class="preview">
+        <iframe id="pv" title="Live preview"></iframe>
+        <label class="over pick"><select id="pvScene" aria-label="Scene to preview"></select><svg class="chev"><use href="#i-chev"/></svg></label>
+        <div class="over speed" id="speed" role="group" aria-label="Preview speed">
+          <button data-s="0" aria-label="Pause"><svg><use href="#i-pause"/></svg></button><button data-s="1">1×</button><button data-s="4">4×</button><button data-s="16">16×</button>
+        </div>
+      </div>
+      <div class="label" id="scenesLabel">Scenes</div>
+      <div class="scenes" id="scenes" role="group" aria-labelledby="scenesLabel"></div>
+      <button class="play" id="playRandom"><svg><use href="#i-play"/></svg><span id="playText">Preview full screen</span></button>
+    </section>
+
+    <section class="right">
+      <h2>When</h2>
+      <div class="group">
+        <div class="row"><label class="t" for="idleMin">Start after idle</label>
+          <div class="ctl"><input type="range" id="idleMin" min="0" max="12" step="1"><output id="idleOut"></output></div></div>
+        <div class="row"><label class="t" for="buildMin">Snow builds up for</label>
+          <div class="ctl"><input type="range" id="buildMin" min="0" max="6" step="1"><output id="buildOut"></output></div></div>
+        <div class="row"><span class="t">Snowfall</span>
+          <div class="seg" data-key="intensity" role="radiogroup" aria-label="Snowfall"><button data-v="gentle">Gentle</button><button data-v="steady">Steady</button><button data-v="heavy">Heavy</button></div></div>
+      </div>
+
+      <h2>Look</h2>
+      <div class="group">
+        <div class="row"><label class="t" for="look">Where it snows</label>
+          <div class="sel"><select id="look"><option value="live">On my desktop</option><option value="snapshot">Snapshot of desktop</option><option value="day">Winter day</option><option value="night">Winter night</option></select><svg><use href="#i-chev"/></svg></div></div>
+        <div class="row"><label class="t" for="dim">Dim desktop</label>
+          <div class="ctl"><input type="range" id="dim" min="0" max="60" step="2"><output id="dimOut"></output></div></div>
+      </div>
+
+      <h2>Screens</h2>
+      <div class="group">
+        <div class="row"><label class="t" for="layout">Multiple screens</label>
+          <div class="sel"><select id="layout"><option value="span">One big scene</option><option value="mirror">Same on each</option><option value="different">Different on each</option><option value="main">Main screen only</option></select><svg><use href="#i-chev"/></svg></div></div>
+        <div class="row"><label class="t" for="perMonitor"><span>Snow on screens I'm not using</span><small>Each screen goes idle on its own</small></label>
+          <div class="sw"><input type="checkbox" role="switch" id="perMonitor"><span></span></div></div>
+      </div>
+
+      <h2>Crew</h2>
+      <div class="group">
+        <div class="row"><label class="t" for="crew">Penguins</label>
+          <div class="ctl"><input type="range" id="crew" min="5" max="8" step="1"><output id="crewOut"></output></div></div>
+        <div class="row"><label class="t" for="iceChance">Ice chance</label>
+          <div class="ctl"><input type="range" id="iceChance" min="0" max="100" step="5"><output id="iceOut"></output></div></div>
+        <div class="row"><label class="t" for="startle">Startled exit</label>
+          <div class="sw"><input type="checkbox" role="switch" id="startle"><span></span></div></div>
+      </div>
+
+      <h2>System</h2>
+      <div class="group">
+        <div class="row"><label class="t" for="enabled">Enabled</label>
+          <div class="sw"><input type="checkbox" role="switch" id="enabled"><span></span></div></div>
+        <div class="row"><label class="t" for="skipBusy">Pause during videos and full-screen apps</label>
+          <div class="sw"><input type="checkbox" role="switch" id="skipBusy"><span></span></div></div>
+        <div class="row"><label class="t" for="autostart">Start with Windows</label>
+          <div class="sw"><input type="checkbox" role="switch" id="autostart"><span></span></div></div>
+        <div class="row" id="updRow"><label class="t" for="autoUpdate">Automatic updates</label>
+          <div class="sw"><input type="checkbox" role="switch" id="autoUpdate"><span></span></div></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="foot">
+    <span class="ver" id="ver"></span>
+    <button class="btn text" id="quit">Exit Snow Day</button>
+    <button class="btn primary" id="hide">Done</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+const INIT = window.__INIT || { settings: {}, version: 'dev', screens: 1 };
+const D = { idleMin: 5, buildMin: 3, intensity: 'steady', look: 'live', layout: 'span', crew: 7, iceChance: 25,
+  scenes: { tree: true, parade: true, ramp: true, ice: true }, dim: 22, startle: true, skipBusy: true, autostart: false, enabled: true, perMonitor: false, autoUpdate: true };
+const S = Object.assign({}, D, INIT.settings || {});
+S.scenes = Object.assign({}, D.scenes, (INIT.settings || {}).scenes || {});
+const post = (m) => { try { window.chrome.webview.postMessage(m); } catch (e) { console.log('[post]', m); } };
+const $ = (id) => document.getElementById(id);
+const icon = (name) => `<svg class="i"><use href="#i-${name}"/></svg>`;
+
+const IDLE = [0.5, 1, 2, 3, 5, 7, 10, 15, 20, 30, 45, 60, 90];
+const BUILD = [1, 2, 3, 5, 8, 12, 20];
+const SCENES = [
+  { k: 'tree', name: 'Deck the Tree' },
+  { k: 'parade', name: 'Candy Parade' },
+  { k: 'ramp', name: 'The Big Ramp' },
+  { k: 'ice', name: 'Ice Day', tag: 'chance', tip: 'Comes up by chance (see Ice chance)' },
+  { k: 'igloo', name: 'Igloo Contest' },
+  { k: 'fishing', name: 'Ice Fishing' },
+  { k: 'blizzard', name: 'Blizzard' },
+  { k: 'flying', name: 'Flying Lessons' },
+  { k: 'snowman', name: 'Giant Snowman' },
+  { k: 'reindeer', name: 'First Reindeer' },
+  { k: 'parkour', name: 'Parkour', tag: 'open windows', tip: 'Runs along the tops of your open windows' },
+  { k: 'snowball', name: 'Snowball Fight', tag: '2 screens', dual: true },
+  { k: 'zipline', name: 'Zipline', tag: '2 screens', dual: true },
+  { k: 'tug', name: 'Tug-of-War', tag: '2 screens', dual: true },
+];
+const nearestIdx = (arr, v) => arr.reduce((bi, x, i) => (Math.abs(x - v) < Math.abs(arr[bi] - v) ? i : bi), 0);
+const fmtMin = (m) => (m < 1 ? `${Math.round(m * 60)} sec` : `${m} min`);
+
+function paintRange(el) { const p = ((el.value - el.min) / (el.max - el.min)) * 100; el.style.setProperty('--p', p + '%'); }
+function bindRange(id, outId, get, set, fmt) {
+  const el = $(id), out = $(outId);
+  el.value = get();
+  const upd = () => { set(+el.value); out.textContent = fmt(+el.value); el.setAttribute('aria-valuetext', out.textContent); paintRange(el); };
+  el.addEventListener('input', () => { upd(); changed(); });
+  upd();
+}
+bindRange('idleMin', 'idleOut', () => nearestIdx(IDLE, S.idleMin), (v) => (S.idleMin = IDLE[v]), (v) => fmtMin(IDLE[v]));
+bindRange('buildMin', 'buildOut', () => nearestIdx(BUILD, S.buildMin), (v) => (S.buildMin = BUILD[v]), (v) => fmtMin(BUILD[v]));
+bindRange('dim', 'dimOut', () => S.dim, (v) => (S.dim = v), (v) => v + '%');
+bindRange('crew', 'crewOut', () => S.crew, (v) => (S.crew = v), (v) => String(v));
+bindRange('iceChance', 'iceOut', () => S.iceChance, (v) => (S.iceChance = v), (v) => v + '%');
+
+if (!INIT.updates) $('updRow').style.display = 'none';
+for (const id of ['startle', 'skipBusy', 'autostart', 'enabled', 'perMonitor', 'autoUpdate']) {
+  const el = $(id); el.checked = !!S[id];
+  el.addEventListener('change', () => { S[id] = el.checked; changed(false); });
+}
+for (const id of ['look', 'layout']) {
+  const el = $(id); el.value = S[id];
+  el.addEventListener('change', () => { S[id] = el.value; changed(true); });
+}
+document.querySelectorAll('.seg').forEach((seg) => {
+  const key = seg.dataset.key;
+  const paint = () => seg.querySelectorAll('button').forEach((b) => { const on = b.dataset.v === S[key]; b.classList.toggle('on', on); b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', on); });
+  seg.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; S[key] = b.dataset.v; paint(); changed(true); });
+  paint();
+});
+
+// scenes: a two-column checklist
+const sc = $('scenes');
+for (const s of SCENES) {
+  const el = document.createElement('div');
+  el.className = 'scene'; el.tabIndex = 0; el.setAttribute('role', 'checkbox');
+  el.innerHTML = `<span class="box"><svg><use href="#i-check"/></svg></span>${icon(s.k)}<span class="nm">${s.name}</span>${s.tag ? `<small>${s.tag}</small>` : ''}`;
+  el.title = s.dual ? 'Needs two screens side by side' : s.tip || s.name;
+  const paint = () => { const on = S.scenes[s.k] !== false; el.classList.toggle('on', on); el.setAttribute('aria-checked', on); };
+  const flip = () => {
+    const enabled = Object.values(S.scenes).filter((v) => v !== false).length;
+    if (S.scenes[s.k] !== false && enabled <= 1) return; // keep at least one
+    S.scenes[s.k] = S.scenes[s.k] === false; paint(); changed(true);
+  };
+  el.addEventListener('click', flip);
+  el.addEventListener('keydown', (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flip(); } });
+  paint(); sc.appendChild(el);
+}
+
+function preview(scene) { post('preview:' + JSON.stringify({ scene: scene || '', settings: S })); }
+$('playRandom').addEventListener('click', () => preview(pvScene));
+const paintPlay = () => { const s = SCENES.find((x) => x.k === pvScene); $('playText').textContent = s ? `Preview ${s.name} full screen` : 'Preview full screen'; };
+$('hide').addEventListener('click', () => { save(); post('hide'); });
+$('quit').addEventListener('click', () => { save(); post('quit'); });
+
+// saving (automatic)
+let saveT = null, pvT = null;
+const ver = $('ver'), verText = 'v' + INIT.version;
+ver.textContent = verText;
+function save() {
+  post('save:' + JSON.stringify(S));
+  ver.textContent = 'Saved'; ver.classList.add('flash');
+  clearTimeout(save.t); save.t = setTimeout(() => { ver.textContent = verText; ver.classList.remove('flash'); }, 900);
+}
+function changed(reloadPreview) {
+  clearTimeout(saveT); saveT = setTimeout(save, 250);
+  if (reloadPreview) { clearTimeout(pvT); pvT = setTimeout(loadPreview, 450); }
+}
+
+// live preview (a pretend desktop for the "on my desktop" looks)
+let pvSeed = (Date.now() % 100000) | 1;
+let pvSpeed = 1;
+const speedEl = $('speed');
+const paintSpeed = () => speedEl.querySelectorAll('button').forEach((b) => { const on = +b.dataset.s === pvSpeed; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+speedEl.addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  pvSpeed = +b.dataset.s; paintSpeed();
+  try { $('pv').contentWindow.postMessage({ sdSpeed: pvSpeed }, '*'); } catch (err) {}
+});
+paintSpeed();
+let pvScene = '', pvLoads = 0;
+const pick = $('pvScene');
+pick.innerHTML = '<option value="">Random scene</option>' + SCENES.map((s) => `<option value="${s.k}">${s.name}</option>`).join('');
+pick.addEventListener('change', () => { pvScene = pick.value; pvSeed = (pvSeed * 7 + 13) % 100000 | 1; paintPlay(); loadPreview(); });
+function loadPreview() {
+  const look = S.look === 'day' || S.look === 'night' ? S.look : 'preview';
+  const s = SCENES.find((x) => x.k === pvScene);
+  const dual = !!(s && s.dual);
+  const cfg = { kind: 'preview', look, fast: true, seed: pvSeed, layout: dual ? 'span' : 'mirror', speed: pvSpeed,
+    force: pvScene || null, skipBuild: !!pvScene, fitAll: dual,
+    screens: dual ? [{ x: 0, y: 0, w: 1600, h: 900 }, { x: 1600, y: 0, w: 1600, h: 900 }] : undefined,
+    settings: { buildMin: S.buildMin, intensity: S.intensity, crew: S.crew, iceChance: S.iceChance, scenes: S.scenes, dim: S.dim, startle: S.startle } };
+  // a new query string forces a real reload (a hash-only change would not)
+  $('pv').src = 'saver.html?r=' + (++pvLoads) + '#' + encodeURIComponent(JSON.stringify(cfg));
+}
+loadPreview();
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { save(); post('hide'); } });
+</script>
+</body>
+</html>

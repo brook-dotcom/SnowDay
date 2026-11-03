@@ -1,0 +1,29 @@
+# build output
+/build/
+*.exe
+*.exe.sha256
+*.old
+
+# local test harness and screenshots (not part of the app)
+/test/
+*.png.tmp
+
+# never commit secrets or machine-specific files
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+*.cer
+*.crt
+id_rsa*
+id_ed25519*
+*.log
+settings.json
+log.txt
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

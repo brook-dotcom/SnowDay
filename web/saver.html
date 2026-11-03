@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Snow Day</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; cursor: none; user-select: none; }
+  canvas, #tint { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  #tint { background: radial-gradient(ellipse at 50% 40%, rgba(18,34,68,0.55), rgba(8,16,36,0.85)); opacity: 0; pointer-events: none; }
+  body.preview { cursor: default; }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div id="tint"></div>
+<canvas id="cv"></canvas>
+<script src="js/util.js"></script>
+<script src="js/world.js"></script>
+<script src="js/penguin.js"></script>
+<script src="js/props.js"></script>
+<script src="js/stage.js"></script>
+<script src="js/props2.js"></script>
+<script src="js/props3.js"></script>
+<script src="js/scenes.js"></script>
+<script src="js/scenes2.js"></script>
+<script src="js/scenes3.js"></script>
+<script src="js/director.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

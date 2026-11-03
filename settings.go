@@ -1,0 +1,132 @@
+//go:build windows
+
+package main
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+
+	"golang.org/x/sys/windows/registry"
+)
+
+type Settings struct {
+	IdleMin    float64         `json:"idleMin"`
+	BuildMin   float64         `json:"buildMin"`
+	Intensity  string          `json:"intensity"`
+	Look       string          `json:"look"`
+	Layout     string          `json:"layout"`
+	Crew       int             `json:"crew"`
+	IceChance  int             `json:"iceChance"`
+	Scenes     map[string]bool `json:"scenes"`
+	Dim        int             `json:"dim"`
+	Startle    bool            `json:"startle"`
+	SkipBusy   bool            `json:"skipBusy"`
+	Autostart  bool            `json:"autostart"`
+	Enabled    bool            `json:"enabled"`
+	Toured     bool            `json:"toured"`
+	PerMonitor bool            `json:"perMonitor"`
+	AutoUpdate bool            `json:"autoUpdate"`
+}
+
+func defaultSettings() Settings {
+	return Settings{
+		IdleMin: 5, BuildMin: 3, Intensity: "steady", Look: "live", Layout: "span",
+		Crew: 7, IceChance: 25, Dim: 22, Startle: true, SkipBusy: true, Enabled: true, AutoUpdate: true,
+		Scenes: map[string]bool{"tree": true, "parade": true, "ramp": true, "ice": true},
+	}
+}
+
+func appDataDir() string {
+	d := os.Getenv("APPDATA")
+	if d == "" {
+		d = os.TempDir()
+	}
+	p := filepath.Join(d, "SnowDay")
+	os.MkdirAll(p, 0o755)
+	return p
+}
+
+func localDir() string {
+	d := os.Getenv("LOCALAPPDATA")
+	if d == "" {
+		d = os.TempDir()
+	}
+	p := filepath.Join(d, "SnowDay")
+	os.MkdirAll(p, 0o755)
+	return p
+}
+
+func loadSettings() Settings {
+	s := defaultSettings()
+	b, err := os.ReadFile(filepath.Join(appDataDir(), "settings.json"))
+	if err == nil {
+		_ = json.Unmarshal(b, &s)
+	}
+	s.sanitize()
+	return s
+}
+
+func (s *Settings) sanitize() {
+	d := defaultSettings()
+	if s.IdleMin < 0.5 {
+		s.IdleMin = 0.5
+	}
+	if s.IdleMin > 120 {
+		s.IdleMin = 120
+	}
+	if s.BuildMin < 0.5 {
+		s.BuildMin = d.BuildMin
+	}
+	if s.Crew < 5 {
+		s.Crew = 5
+	}
+	if s.Crew > 8 {
+		s.Crew = 8
+	}
+	if s.IceChance < 0 || s.IceChance > 100 {
+		s.IceChance = d.IceChance
+	}
+	if s.Dim < 0 || s.Dim > 70 {
+		s.Dim = d.Dim
+	}
+	switch s.Intensity {
+	case "gentle", "steady", "heavy":
+	default:
+		s.Intensity = d.Intensity
+	}
+	switch s.Look {
+	case "live", "snapshot", "day", "night":
+	default:
+		s.Look = d.Look
+	}
+	switch s.Layout {
+	case "span", "mirror", "different", "main":
+	default:
+		s.Layout = d.Layout
+	}
+	if s.Scenes == nil {
+		s.Scenes = d.Scenes
+	}
+}
+
+func saveSettings(s Settings) error {
+	b, _ := json.MarshalIndent(s, "", "  ")
+	return os.WriteFile(filepath.Join(appDataDir(), "settings.json"), b, 0o644)
+}
+
+const runKey = `Software\Microsoft\Windows\CurrentVersion\Run`
+
+func applyAutostart(on bool) {
+	k, err := registry.OpenKey(registry.CURRENT_USER, runKey, registry.SET_VALUE|registry.QUERY_VALUE)
+	if err != nil {
+		return
+	}
+	defer k.Close()
+	if on {
+		exe, _ := os.Executable()
+		_ = k.SetStringValue("SnowDay", `"`+exe+`" --tray`)
+	} else {
+		_ = k.DeleteValue("SnowDay")
+	}
+}
