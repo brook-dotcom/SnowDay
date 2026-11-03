@@ -57,6 +57,13 @@
   .over button svg { width: 12px; height: 12px; fill: currentColor; stroke: none; }
   .over .sep { width: 1px; height: 16px; margin: 0 3px; background: rgba(255,255,255,0.16); }
   #pvFull svg { fill: none; }
+  /* full screen, like a video player: the same preview fills the screen; controls fade while you watch */
+  body.full .preview { position: fixed; inset: 0; z-index: 100; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
+  body.full .over { top: 20px; transition: opacity .25s var(--ease); }
+  body.full .over.pick { left: 20px; }
+  body.full .over.speed { right: 20px; }
+  body.full.still .over { opacity: 0; pointer-events: none; }
+  body.full.still { cursor: none; }
 
   .label { color: var(--mute); font-size: 12px; font-weight: 600; line-height: 16px; margin: 14px 0 6px; }
   .scenes { display: grid; grid-template-columns: 1fr 1fr; grid-auto-flow: column; grid-template-rows: repeat(7, 28px); column-gap: 8px;
@@ -157,6 +164,7 @@
     <symbol id="i-check" viewBox="0 0 10 10"><path d="M1.8 5.2 4 7.4l4.2-4.8"/></symbol>
     <symbol id="i-play" viewBox="0 0 12 12"><path d="M3 1.8v8.4L10 6z"/></symbol>
     <symbol id="i-expand" viewBox="0 0 12 12"><path d="M1.75 4.25v-2.5h2.5M7.75 1.75h2.5v2.5M10.25 7.75v2.5h-2.5M4.25 10.25h-2.5v-2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-shrink" viewBox="0 0 12 12"><path d="M4.25 1.75v2.5h-2.5M10.25 4.25h-2.5v-2.5M7.75 10.25v-2.5h2.5M1.75 7.75h2.5v2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-pause" viewBox="0 0 12 12"><rect x="2.5" y="2" width="2.5" height="8" rx=".5"/><rect x="7" y="2" width="2.5" height="8" rx=".5"/></symbol>
   </defs>
 </svg>
@@ -170,7 +178,7 @@
         <label class="over pick"><select id="pvScene" aria-label="Scene to preview"></select><svg class="chev"><use href="#i-chev"/></svg></label>
         <div class="over speed" id="speed" role="group" aria-label="Preview speed">
           <button data-s="0" aria-label="Pause"><svg><use href="#i-pause"/></svg></button><button data-s="1">1×</button><button data-s="4">4×</button><button data-s="16">16×</button>
-          <i class="sep"></i><button id="pvFull" aria-label="Full screen" title="Full screen"><svg><use href="#i-expand"/></svg></button>
+          <i class="sep"></i><button id="pvFull" aria-label="Full screen" title="Full screen"><svg><use id="pvFullIcon" href="#i-expand"/></svg></button>
         </div>
       </div>
       <div class="label" id="scenesLabel">Scenes</div>
@@ -277,8 +285,9 @@ function paintIdleCap() {
   const cap = INIT.idleCap, el = $('idleCap');
   const on = cap && cap.sec < S.idleMin * 60;
   el.hidden = !on;
+  if (!on) return;
   const why = { 'the screen turns off': 'screen-off', 'the PC sleeps': 'sleep', 'the Windows screensaver starts': 'the Windows screensaver' }[cap.why] || cap.why;
-  if (on) el.textContent = `Starts at ${fmtSec(cap.sec)} here, before ${why}`;
+  el.textContent = `Starts at ${fmtSec(cap.sec)} here, before ${why}`;
 }
 $('idleMin').addEventListener('input', paintIdleCap);
 paintIdleCap();
@@ -348,8 +357,24 @@ speedEl.addEventListener('click', (e) => {
   try { $('pv').contentWindow.postMessage({ sdSpeed: pvSpeed }, '*'); } catch (err) {}
 });
 paintSpeed();
-// full screen on every screen, with the same pause and speed controls; Esc or Close comes back here
-$('pvFull').addEventListener('click', () => post('studio:' + JSON.stringify({ scene: pvScene, settings: S, speed: pvSpeed || 1, seed: pvSeed })));
+// full screen, like a video: the same preview keeps playing, just bigger. Esc, the button or a
+// double-click on the picture comes back.
+let stillT = null;
+function setFull(on) {
+  if (document.body.classList.contains('full') === on) return;
+  document.body.classList.toggle('full', on);
+  $('pvFullIcon').setAttribute('href', on ? '#i-shrink' : '#i-expand');
+  $('pvFull').setAttribute('aria-label', on ? 'Exit full screen' : 'Full screen'); $('pvFull').title = $('pvFull').getAttribute('aria-label');
+  post('fullscreen:' + (on ? 1 : 0));
+  wakeControls();
+}
+function wakeControls() {
+  document.body.classList.remove('still'); clearTimeout(stillT);
+  if (document.body.classList.contains('full')) stillT = setTimeout(() => { if (!document.querySelector('.over:hover')) document.body.classList.add('still'); }, 2500);
+}
+$('pvFull').addEventListener('click', () => setFull(!document.body.classList.contains('full')));
+document.querySelector('.preview').addEventListener('dblclick', (e) => { if (!e.target.closest('.over')) setFull(!document.body.classList.contains('full')); });
+document.addEventListener('mousemove', wakeControls);
 let pvScene = '', pvLoads = 0;
 const pick = $('pvScene');
 pick.innerHTML = '<option value="">Random scene</option>' + SCENES.map((s) => `<option value="${s.k}">${s.name}</option>`).join('');
@@ -366,7 +391,10 @@ function loadPreview() {
   $('pv').src = 'saver.html?r=' + (++pvLoads) + '#' + encodeURIComponent(JSON.stringify(cfg));
 }
 loadPreview();
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { save(); post('hide'); } });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { if (document.body.classList.contains('full')) setFull(false); else { save(); post('hide'); } }
+  else if (e.key === ' ' && document.body.classList.contains('full')) { e.preventDefault(); speedEl.querySelector(`[data-s="${pvSpeed === 0 ? 1 : 0}"]`).click(); }
+});
 </script>
 </body>
 </html>

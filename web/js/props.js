@@ -695,8 +695,9 @@
 
   // ======================= held items (penguin-local coordinates) =======================
   SD.items = {
-    // shouldered like a marching band: drawn behind the body, top leaning back over the far shoulder
-    cane: (len = 96) => ({ at: 'back', draw(ctx, p) { ctx.translate(4, -28); ctx.rotate(-0.5 + Math.sin(p.phase) * 0.03); drawCane(ctx, len, 13, 8, 1); } }),
+    // shouldered like a marching band: gripped low in the near flipper, in front of the body, leaning
+    // back past the side of the head so the hook rests behind it (the flipper is drawn over the grip)
+    cane: (len = 96) => ({ at: 'front', draw(ctx, p, hx, hy) { ctx.translate(hx, hy); ctx.rotate(-0.42 + Math.sin(p.phase) * 0.03); ctx.translate(0, 16); drawCane(ctx, len, 13, 8, 1); } }),
     baton: () => ({ at: 'front', draw(ctx, p, hx, hy, a) {
       ctx.translate(hx, hy); ctx.rotate(p.t * 9);
       ctx.lineCap = 'round'; ctx.strokeStyle = INK; ctx.lineWidth = 5.5; ctx.beginPath(); ctx.moveTo(-26, 0); ctx.lineTo(26, 0); ctx.stroke();

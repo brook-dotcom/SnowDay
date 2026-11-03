@@ -356,7 +356,7 @@
         case 'carryFront': P.aF = -0.95; P.aB = -1.15; break;
         case 'carryLadder': P.aF = -1.3; P.aB = -1.4; P.lean = -0.04; P.bob += Math.sin(ph) * 0.6; break;
         case 'hold': P.aF = -0.8; break;
-        case 'carryShoulder': P.aF = -0.95; P.aB = -0.3; break;
+        case 'carryShoulder': P.aF = -0.55; P.aB = -0.25; break;
         case 'push': P.lean = 0.3; P.aF = -1.35; P.aB = -1.5; break;
         case 'cheer':
           P.bob += -Math.abs(Math.sin(t * 7.5 + this.id)) * 10; P.aF = PI - 0.35 + Math.sin(t * 15) * 0.25; P.aB = -(PI - 0.35) - Math.sin(t * 15 + 1) * 0.25;

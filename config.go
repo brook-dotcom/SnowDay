@@ -17,6 +17,41 @@ import (
 var cfgWin struct {
 	hwnd uintptr
 	web  *edge.Chromium
+	full bool    // the preview is full screen (like a video player): the window covers its monitor
+	keep RECT    // where the window was before
+	kept uintptr // and its style
+}
+
+var (
+	pSetWindowLongPtrW = user32.NewProc("SetWindowLongPtrW")
+	pMonitorFromWindow = user32.NewProc("MonitorFromWindow")
+)
+
+// full screen for the live preview: the settings window drops its frame and covers the monitor it's
+// on, and the page shows only the preview; leaving puts everything back where it was
+func setConfigFullscreen(on bool) {
+	h := cfgWin.hwnd
+	if h == 0 || on == cfgWin.full {
+		return
+	}
+	const gwlStyle = ^uintptr(15)    // GWL_STYLE (-16)
+	const swpFrame = 0x0020 | 0x0200 // SWP_FRAMECHANGED | SWP_NOOWNERZORDER
+	if on {
+		pGetWindowRect.Call(h, uintptr(unsafe.Pointer(&cfgWin.keep)))
+		cfgWin.kept, _, _ = pGetWindowLongPtrW.Call(h, gwlStyle)
+		mon, _, _ := pMonitorFromWindow.Call(h, 2) // MONITOR_DEFAULTTONEAREST
+		mi := MONITORINFO{CbSize: uint32(unsafe.Sizeof(MONITORINFO{}))}
+		pGetMonitorInfoW.Call(mon, uintptr(unsafe.Pointer(&mi)))
+		r := mi.RcMonitor
+		pSetWindowLongPtrW.Call(h, gwlStyle, WS_POPUP|WS_VISIBLE|WS_CLIPCHILDREN)
+		pSetWindowPos.Call(h, 0, uintptr(r.Left), uintptr(r.Top), uintptr(r.Right-r.Left), uintptr(r.Bottom-r.Top), swpFrame)
+	} else {
+		r := cfgWin.keep
+		pSetWindowLongPtrW.Call(h, gwlStyle, cfgWin.kept)
+		pSetWindowPos.Call(h, 0, uintptr(r.Left), uintptr(r.Top), uintptr(r.Right-r.Left), uintptr(r.Bottom-r.Top), swpFrame)
+	}
+	cfgWin.full = on
+	forceForeground(h)
 }
 
 func registerConfigClass() {
@@ -96,7 +131,7 @@ func closeConfig() {
 		cfgWin.web.Close()
 	}
 	h := cfgWin.hwnd
-	cfgWin.hwnd, cfgWin.web = 0, nil
+	cfgWin.hwnd, cfgWin.web, cfgWin.full = 0, nil, false
 	pDestroyWindow.Call(h)
 	if !app.balloonDone && !app.settings.Toured {
 		app.balloonDone = true
@@ -132,23 +167,8 @@ func onConfigMessage(msg string) {
 		st := p.Settings
 		previewReq = &saverOpts{Fast: true, Force: p.Scene, Settings: &st}
 		pSetTimer.Call(app.hwnd, timerPreview, 50, 0)
-	case strings.HasPrefix(msg, "studio:"):
-		var p struct {
-			Scene    string   `json:"scene"`
-			Settings Settings `json:"settings"`
-			Speed    float64  `json:"speed"`
-			Seed     uint32   `json:"seed"`
-		}
-		if err := json.Unmarshal([]byte(msg[7:]), &p); err != nil {
-			return
-		}
-		p.Settings.sanitize()
-		st := p.Settings
-		if p.Speed <= 0 {
-			p.Speed = 1
-		}
-		previewReq = &saverOpts{Fast: true, Force: p.Scene, Settings: &st, Studio: true, SkipBuild: p.Scene != "", Speed: p.Speed, Seed: p.Seed}
-		pSetTimer.Call(app.hwnd, timerPreview, 50, 0)
+	case msg == "fullscreen:1" || msg == "fullscreen:0":
+		setConfigFullscreen(msg == "fullscreen:1")
 	case msg == "hide":
 		pPostMessageW.Call(app.hwnd, WM_HIDECONFIG, 0, 0)
 	case msg == "quit":

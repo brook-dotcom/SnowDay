@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -51,13 +50,9 @@ type saverWin struct {
 }
 
 type saverOpts struct {
-	Fast      bool
-	Force     string
-	Settings  *Settings
-	Studio    bool    // full-screen preview: plays on, with pause and speed controls, until closed
-	SkipBuild bool    // start with the snow already down
-	Speed     float64 // studio: starting speed
-	Seed      uint32  // 0 = pick one
+	Fast     bool
+	Force    string
+	Settings *Settings
 }
 
 var saver struct {
@@ -293,9 +288,6 @@ func saverConfig(s Settings, o saverOpts, bgURL string, screens []screenCfg, me 
 	if o.Force != "" {
 		cfg["force"] = o.Force
 	}
-	if o.Studio {
-		cfg["studio"], cfg["skipBuild"], cfg["speed"] = true, o.SkipBuild, o.Speed
-	}
 	return cfg
 }
 
@@ -406,9 +398,6 @@ func startSaver(o saverOpts) {
 	resetSaverState(o)
 	saver.merged = true
 	seed := uint32(time.Now().UnixNano()&0x7fffffff) | 1
-	if o.Seed != 0 {
-		seed = o.Seed
-	}
 	start := time.Now().Add(1500 * time.Millisecond).UnixMilli()
 	for i, m := range use {
 		if !saver.running {
@@ -543,9 +532,12 @@ func monitorTick() {
 		due = append(due, m)
 	}
 	if len(due) == len(mons) && !saver.running {
-		// nobody's using any screen: the normal all-screens saver
+		// nobody's using any screen: one world across all of them, but each still wakes on its own
 		diag.autoStart++
 		startSaver(saverOpts{})
+		if saver.running {
+			saver.perMon = true
+		}
 		return
 	}
 	if len(due) > 0 {
@@ -740,15 +732,9 @@ func saverTick() {
 		pKillTimer.Call(app.hwnd, timerSaver)
 		return
 	}
-	if saver.perMon && !saver.merged {
-		perMonSaverTick()
+	if saver.perMon {
+		perMonSaverTick() // "snow on screens I'm not using": each screen wakes on its own
 		return
-	}
-	if saver.opts.Studio {
-		if !inputDesktopIsDefault() {
-			stopSaver()
-		}
-		return // the mouse and keyboard drive the controls instead
 	}
 	since := time.Since(saver.started)
 	if !saver.armed {
@@ -829,9 +815,9 @@ func perMonSaverTick() {
 	moved := dx*dx+dy*dy > 12*12
 	saver.baseTick = t
 	if c == saver.baseCursor {
-		// keys/clicks: only matter once every screen is snowing (you've come back)
+		// keys/clicks: only matter once every screen is snowing (you're back at one of them)
 		if allCovered {
-			stopSaver()
+			leaveScreen(winOn(mons[monitorAt(mons, c)]), false)
 		}
 		return
 	}
@@ -843,13 +829,64 @@ func perMonSaverTick() {
 	if w == nil || time.Since(w.started) < 1200*time.Millisecond {
 		return
 	}
-	if allCovered {
-		for _, x := range saver.wins {
-			wakeWin(x)
-		}
-	} else {
-		wakeWin(w)
+	leaveScreen(w, true)
+}
+
+// a scene spanning two screens is playing in the joined-up world
+func dualSceneShowing() bool {
+	if !saver.merged {
+		return false
 	}
+	for _, w := range saver.wins {
+		switch w.scene {
+		case "snowball", "zipline", "tug":
+			return true
+		}
+	}
+	return false
+}
+
+// someone is back at this screen: its snow melts away (with the startle, for a mouse move) and the
+// other screens carry on snowing, unless one scene spans them, in which case they all go together
+func leaveScreen(sw *saverWin, startle bool) {
+	if sw == nil || sw.waking {
+		return
+	}
+	if dualSceneShowing() {
+		if startle {
+			for _, w := range saver.wins {
+				wakeWin(w)
+			}
+		} else {
+			pPostMessageW.Call(app.hwnd, WM_STOPSAVER, 0, 0)
+		}
+		return
+	}
+	saver.merged = false // whatever is left carries on screen by screen
+	if startle {
+		wakeWin(sw)
+	} else {
+		pPostMessageW.Call(app.hwnd, WM_CLOSEWIN, sw.hwnd, 0)
+	}
+	// give the keyboard back if a snowing screen had it
+	if len(saver.wins) > 1 && saver.prevFG != 0 {
+		fg, _, _ := pGetForegroundWindow.Call()
+		if root, _, _ := pGetAncestor.Call(fg, 2); saverByHwnd[root] != nil {
+			pSetForegroundWindow.Call(saver.prevFG)
+		}
+	}
+}
+
+// the snowing window under the pointer (or nil)
+func winUnderCursor() *saverWin {
+	mons := act.mons
+	if mons == nil {
+		mons = sortedMonitors()
+	}
+	if i := monitorAt(mons, cursorPos()); i >= 0 {
+		return winOn(mons[i])
+	}
+	return nil
 }
 
 func beginWake() {
@@ -872,31 +909,12 @@ func beginWake() {
 }
 
 func onSaverMessage(sw *saverWin, msg string) {
-	if saver.opts.Studio {
-		switch {
-		case strings.HasPrefix(msg, "speed:"):
-			if sp, err := strconv.ParseFloat(msg[6:], 64); err == nil && sp >= 0 && sp <= 64 {
-				// every screen changes speed at the same moment, so they stay in step
-				at := time.Now().Add(150 * time.Millisecond).UnixMilli()
-				for _, w := range saver.wins {
-					if w.web != nil && w.web.Ready() {
-						w.web.Eval(fmt.Sprintf("window.SD && SD.setSpeedAt && SD.setSpeedAt(%d, %g)", at, sp))
-					}
-				}
-			}
-		case msg == "close":
-			pPostMessageW.Call(app.hwnd, WM_STOPSAVER, 0, 0)
-		case strings.HasPrefix(msg, "scene:"):
-			log.Printf("full-screen preview: %s", msg)
-		}
-		return
-	}
-	separate := saver.perMon && !saver.merged
+	separate := saver.perMon // each screen wakes on its own
 	switch {
 	case msg == "move":
 		if separate {
 			if time.Since(sw.started) > 1200*time.Millisecond {
-				wakeWin(sw)
+				leaveScreen(sw, true)
 			}
 		} else if saver.armed {
 			beginWake()
@@ -904,7 +922,11 @@ func onSaverMessage(sw *saverWin, msg string) {
 	case msg == "quit":
 		if separate {
 			if time.Since(sw.started) > 1200*time.Millisecond {
-				pPostMessageW.Call(app.hwnd, WM_CLOSEWIN, sw.hwnd, 0)
+				w := winUnderCursor() // a key goes to whichever screen has focus: wake the one you're at
+				if w == nil {
+					w = sw
+				}
+				leaveScreen(w, false)
 			}
 		} else if saver.armed {
 			pPostMessageW.Call(app.hwnd, WM_STOPSAVER, 0, 0)
