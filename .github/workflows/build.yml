@@ -72,9 +72,8 @@ jobs:
           VER: v${{ needs.build.outputs.version }}
         run: |
           if gh release view "$VER" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "$VER is already released; nothing to do."
+            gh release edit "$VER" --repo "$GITHUB_REPOSITORY" --notes ""
             exit 0
           fi
           gh release create "$VER" SnowDay.exe SnowDay.exe.sha256 \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Snow Day $VER" \
-            --notes "Download **SnowDay.exe** and run it. Already installed? It updates itself within a few hours."
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Snow Day $VER" --notes ""
