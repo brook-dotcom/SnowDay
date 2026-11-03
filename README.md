@@ -43,7 +43,8 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 GOFLAGS=-mod=mod GOPROXY=off GOSUMDB=off
   go build -trimpath -ldflags "-H windowsgui -s -w" -o SnowDay.exe .
 ```
 
-Releases are built by GitHub Actions when a `v*` tag is pushed (`.github/workflows/build.yml`), and every
-push runs `tools/secret-scan.sh` first.
+Every push to `main` runs `tools/secret-scan.sh` and builds the exe (`.github/workflows/build.yml`).
+To ship an update, bump `appVersion` in `main.go`: the next push publishes a release for that version,
+and installed copies update themselves.
 
 The penguins, reindeer and scenes are original artwork drawn in code (`web/js/`).
