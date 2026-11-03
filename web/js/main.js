@@ -136,6 +136,7 @@
       director.step(DT);
       world.step(DT);
       for (const p of world.actors) p.update(DT);
+      SD.personalSpace(world.actors, DT);
       for (const pr of world.props) pr.update(DT);
       if (world.actors.some((a) => a.dead)) world.actors = world.actors.filter((a) => !a.dead);
       if (world.props.some((a) => a.dead)) world.props = world.props.filter((a) => !a.dead);

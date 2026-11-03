@@ -1160,4 +1160,30 @@
   }
 
   SD.Penguin = Penguin;
+
+  // Personal space: penguins standing about at much the same depth shuffle apart instead of standing
+  // inside each other. Huddles and hugs opt out (p.snug, or the 'hug' action); anyone walking, carried,
+  // sitting, climbing or up on a ledge is left alone.
+  SD.personalSpace = (actors, dt) => {
+    const free = [];
+    for (const p of actors) {
+      if (!(p instanceof Penguin) || p.dead || p.hidden || p.snug || p.attach || p.inVehicle) continue;
+      if (p.loco !== 'stand' || p.target != null || p.action === 'hug' || p.limbo) continue;
+      if (Math.abs(p.y - p.groundY()) > 2) continue;
+      free.push(p);
+    }
+    free.sort((a, b) => a.x - b.x || a.id - b.id);
+    for (let i = 0; i < free.length; i++) {
+      const a = free[i];
+      for (let j = i + 1; j < free.length; j++) {
+        const b = free[j];
+        const min = 34 * (a.size * a.K.kx + b.size * b.K.kx); // bodies just clear of each other
+        const dx = b.x - a.x;
+        if (dx >= min) break;
+        if (Math.abs(a.lane - b.lane) > 6) continue;
+        const step = Math.min(min - dx, 50 * dt) / 2;
+        a.x -= step; b.x += step;
+      }
+    }
+  };
 })();

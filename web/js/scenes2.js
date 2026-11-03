@@ -424,9 +424,12 @@
     yield* S.until(() => walks.every((c) => c.done) || true, 0);
     // huddle up
     const hx0 = S.cx;
-    const spots = all.map((p, i) => hx0 + (i - (all.length - 1) / 2) * 34);
+    // two rows, staggered: each penguin overlaps only the ones in the other row, so every face shows
+    const ROW = [10, 22];
+    const spots = all.map((p, i) => hx0 + (i - (all.length - 1) / 2) * 36);
     pip.attach = null;
-    yield all.map((p, i) => S.run((function* () { p.action = 'push'; yield* S.walk(p, spots[i], 40); p.face(p.x < hx0 ? 1 : -1); p.action = 'shiver'; p.laneT = 12 + ((i * 5) % 9); })()));
+    all.forEach((p) => { p.snug = true; }); // a huddle is meant to be tight
+    yield all.map((p, i) => S.run((function* () { p.action = 'push'; p.laneT = ROW[i % 2]; yield* S.walk(p, spots[i], 40); p.face(p.x < hx0 ? 1 : -1); p.action = 'shiver'; })()));
     let huddle = true;
     S.run((function* () {
       // snow piles on their heads; the upwind penguin keeps cycling round to the sheltered side
@@ -439,11 +442,12 @@
       yield 3;
       const sorted = all.slice().sort((a, b) => (a.x - b.x) * wd);
       const p = sorted[0];
-      p.action = 'push'; p.laneT = 6;
-      yield* S.walk(p, sorted[sorted.length - 1].x + wd * 34, 45);
-      p.face(-wd); p.action = 'shiver'; p.laneT = 12 + S.r() * 9;
+      const tail = sorted[sorted.length - 1];
+      p.action = 'push'; p.laneT = 4; // round the back
+      yield* S.walk(p, tail.x + wd * 36, 45);
+      p.face(-wd); p.action = 'shiver'; p.laneT = tail.laneT > 16 ? ROW[0] : ROW[1];
       // everyone shuffles upwind a little to stay together
-      all.forEach((q) => { if (q !== p) q.goTo(q.x + wd * 34 * 0.5, 20); });
+      all.forEach((q) => { if (q !== p) q.goTo(q.x + wd * 18, 20); });
       yield 1;
     }
     // the captain's long scarf
@@ -455,6 +459,7 @@
     // storm passes
     yield* S.tween(5, (u) => { w.windBase = lerp(wd * 120, 8, SD.smooth(u)); w.snowfall = lerp(1.7, 0.3, u); w.haze = 0.22 * (1 - u); w.gale = 0.32 * (1 - u); });
     huddle = false;
+    all.forEach((p) => { p.snug = false; });
     S.weather = false;
     yield 1;
     // shake the snow off

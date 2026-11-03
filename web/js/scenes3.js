@@ -290,7 +290,10 @@
     // everyone hides behind Chubby
     const hiders = all.filter((p) => p !== chubby);
     chubby.laneT = 20; chubby.action = 'shiver';
-    hiders.forEach((p, i) => { p.loco = 'scrabble'; p.laneT = 8 + (i % 3) * 1.5; p.goTo(chubby.x + crewSide * (14 + (i % 3) * 10) + S.r.range(-6, 6), 160); });
+    // a line of shivering penguins tucked in behind the big one, each face still peeking out
+    // (nearest slot to whoever is nearest, so nobody runs through anybody)
+    hiders.sort((a, b) => crewSide * (a.x - b.x));
+    hiders.forEach((p, i) => { p.loco = 'scrabble'; p.laneT = 11 + (i % 2) * 3; p.goTo(chubby.x + crewSide * (40 + i * 52), 160); });
     yield* S.until(() => hiders.every((p) => p.arrived()), 4);
     hiders.forEach((p) => { p.loco = 'stand'; p.action = 'shiver'; p.face(dir); });
     if (rocco) rocco.shadesDown = 1;
@@ -340,7 +343,7 @@
     // it kneels down: climb aboard!
     deer.kneelT = 1;
     yield 1.4;
-    const riders = [pip, chubby, ...crew.filter((p) => p !== pip && p !== chubby)].slice(0, 4);
+    const riders = [pip, chubby, ...crew.filter((p) => p !== pip && p !== chubby)].slice(0, 3); // three fit on its back without squashing
     for (let i = 0; i < riders.length; i++) {
       const p = riders[i];
       p.laneT = deer.lane + 1 + i * 0.1;
