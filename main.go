@@ -26,7 +26,7 @@ var webFS embed.FS
 var iconFS embed.FS
 
 // appVersion is the release version (CI sets it from the git tag with -ldflags "-X main.appVersion=...")
-var appVersion = "1.3.3"
+var appVersion = "1.3.4"
 
 // buildID is stamped at build time (-ldflags "-X main.buildID=...") so a newer exe can replace a running older one.
 var buildID = "dev"
@@ -291,6 +291,7 @@ func showTrayMenu() {
 	if updatesEnabled() {
 		add(idCheckUpdate, "Check for updates", 0)
 	}
+	add(idDiag, "Diagnostics…", 0)
 	add(idExit, "Exit Snow Day", 0)
 	pt := cursorPos()
 	pSetForegroundWindow.Call(app.hwnd)
@@ -314,6 +315,8 @@ func showTrayMenu() {
 		updateTrayTip()
 	case idCheckUpdate:
 		startUpdateCheck(true)
+	case idDiag:
+		showDiagnostics()
 	case idExit:
 		quitApp()
 	}
@@ -400,6 +403,7 @@ func trayProc(hwnd, msg, wp, lp uintptr) uintptr {
 
 // ---------- idle watching ----------
 func checkIdle() {
+	diagTick()
 	powerTick()
 	if saver.running || app.busy || perMonitorActive() {
 		return
@@ -414,7 +418,9 @@ func checkIdle() {
 		reason = busyReason()
 	}
 	setStatus(reason)
+	diagHeld(reason)
 	if reason == "" {
+		diag.autoStart++
 		startSaver(saverOpts{})
 	}
 }

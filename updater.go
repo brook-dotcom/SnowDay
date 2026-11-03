@@ -227,7 +227,7 @@ func copyFile(src, dst string) error {
 	return out.Close()
 }
 
-// every minute: install a waiting update when the coast is clear; check GitHub every six hours
+// every minute: install a waiting update when the coast is clear; check GitHub every hour
 var updTicks = 0
 
 func updateTick() {
@@ -235,7 +235,7 @@ func updateTick() {
 		installUpdate()
 		return
 	}
-	if updTicks%360 == 0 && app.settings.AutoUpdate {
+	if updTicks%60 == 0 && app.settings.AutoUpdate {
 		startUpdateCheck(false)
 	}
 	updTicks++

@@ -515,12 +515,18 @@ func monitorTick() {
 		return // the classic all-screens saver is up
 	}
 	s := app.settings
-	if app.busy || blockedReason() != "" {
+	after, _ := startAfter()
+	allIdle := time.Duration(idleMillis())*time.Millisecond >= after // nobody's here: beat the screen-off
+	if app.busy {
+		return
+	}
+	if why := blockedReason(); why != "" {
+		if allIdle && !saver.running {
+			diagHeld(why)
+		}
 		return
 	}
 	limit := time.Duration(s.IdleMin * float64(time.Minute))
-	after, _ := startAfter()
-	allIdle := time.Duration(idleMillis())*time.Millisecond >= after // nobody's here: beat the screen-off
 	var due []monitor
 	for _, m := range mons {
 		if winOn(m) != nil || (!allIdle && now.Sub(act.last[monKey(m)]) < limit) {

@@ -12,14 +12,15 @@ they dive into the snow as it melts away.
    code-signed: choose **More info → Run anyway**.
 3. Settings open; press **Done** and Snow Day waits in the system tray.
 
-Snow Day updates itself: it checks this repository's releases every few hours and quietly swaps in a new
+Snow Day updates itself: it checks this repository's releases every hour and quietly swaps in a new
 version when the screensaver isn't showing. You can turn this off in Settings, or use **Check for updates**
 in the tray menu.
 
 Needs Windows 10 or 11 (uses the built-in WebView2).
 
 On laptops, if Windows turns the screen off, sleeps or locks sooner than your idle time, the snow starts just
-before that. Hover over the tray icon to see when it will start, or what it's waiting for.
+before that. Hover over the tray icon to see when it will start, or what it's waiting for. If it still
+doesn't start, **Diagnostics** in the tray menu writes a short report (it stays on your PC).
 
 ## The crew
 
