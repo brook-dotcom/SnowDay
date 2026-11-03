@@ -532,17 +532,24 @@ func monitorTick() {
 		if winOn(m) != nil || (!allIdle && now.Sub(act.last[monKey(m)]) < limit) {
 			continue
 		}
-		if s.SkipBusy && screenBusy(mons, m) {
-			continue
+		if s.SkipBusy {
+			if why := screenBusyReason(mons, m); why != "" {
+				if allIdle && !saver.running {
+					diagHeld(why)
+				}
+				continue
+			}
 		}
 		due = append(due, m)
 	}
 	if len(due) == len(mons) && !saver.running {
 		// nobody's using any screen: the normal all-screens saver
+		diag.autoStart++
 		startSaver(saverOpts{})
 		return
 	}
 	if len(due) > 0 {
+		diag.autoStart++
 		startMonitorSaver(due[0])
 	}
 	// every screen is snowing: join them into one world at the next blizzard
@@ -557,21 +564,23 @@ func monitorTick() {
 	}
 }
 
-// a full-screen app or a playing video on this screen
-func screenBusy(mons []monitor, m monitor) bool {
+// a full-screen app or a playing video on this screen ("" = free)
+func screenBusyReason(mons []monitor, m monitor) string {
 	if displayHeldAwake() {
-		return true // a video somewhere: can't tell which screen it's on, so hold off
+		return "an app is keeping the screen on" // a video somewhere: can't tell which screen it's on, so hold off
 	}
 	var st int32
 	if r, _, _ := pSHQueryUserNotificationState.Call(uintptr(unsafe.Pointer(&st))); r == 0 && (st == 3 || st == 4) {
-		return true // full-screen game or presentation mode
+		return "a game or presentation is full screen"
 	}
 	fg, _, _ := pGetForegroundWindow.Call()
 	if fg == 0 {
-		return false
+		return ""
 	}
-	i := monitorOfWindow(mons, fg)
-	return i >= 0 && monKey(mons[i]) == monKey(m) && isFullscreen(fg, m)
+	if i := monitorOfWindow(mons, fg); i >= 0 && monKey(mons[i]) == monKey(m) && isFullscreen(fg, m) {
+		return "a full-screen app is open"
+	}
+	return ""
 }
 
 func startMonitorSaver(m monitor) {

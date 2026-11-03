@@ -26,7 +26,7 @@ var webFS embed.FS
 var iconFS embed.FS
 
 // appVersion is the release version (CI sets it from the git tag with -ldflags "-X main.appVersion=...")
-var appVersion = "1.3.5"
+var appVersion = "1.3.6"
 
 // buildID is stamped at build time (-ldflags "-X main.buildID=...") so a newer exe can replace a running older one.
 var buildID = "dev"

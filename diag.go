@@ -133,7 +133,7 @@ func diagReport() string {
 	up := now.Sub(diag.started)
 	p("Running for %s; idle checks %d (expected about %d).", clock(up), diag.ticks, int(up.Seconds()))
 	p("")
-	p("Settings: on %s, paused %s, snoozed %s, start after %s idle, pause for full-screen apps %s,",
+	p("Settings: Snow Day %s, paused %s, snoozed %s, start after %s idle, pause for full-screen apps %s,",
 		onOff(s.Enabled), onOff(app.paused), onOff(now.Before(app.snoozeUntil)), humanDur(time.Duration(s.IdleMin*float64(time.Minute))), onOff(s.SkipBusy))
 	p("  screens %d, layout %s, snow on screens I'm not using %s", len(sortedMonitors()), s.Layout, onOff(s.PerMonitor))
 	p("")
