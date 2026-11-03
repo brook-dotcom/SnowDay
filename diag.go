@@ -170,7 +170,9 @@ func diagReport() string {
 		}
 	}
 	p("  Front window: %s (%s), full screen %s", windowProgram(fg), windowClass(fg), onOff(full))
-	p("  Windows notification state %d, screen kept on by an app %s (state 0x%x)", st, onOff(es&0x2 != 0 && !power.holding), es)
+	listenTick()
+	p("  Windows notification state %d, screen kept on by an app %s (state 0x%x), sound in the last 20 sec %s",
+		st, onOff(es&0x2 != 0 && !power.holding), es, onOff(soundPlaying()))
 	why2 := blockedReason()
 	if why2 == "" && s.SkipBusy {
 		why2 = busyReason()

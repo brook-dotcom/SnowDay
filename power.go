@@ -233,8 +233,10 @@ func busyReason() string {
 			return "a full-screen app is open"
 		}
 	}
-	if displayHeldAwake() {
-		return "an app is keeping the screen on"
+	// an app keeping the screen on only counts when there's sound too: plenty of apps hold the
+	// screen on and forget, and then neither the snow nor Windows' own screen-off would ever come
+	if watchingSomething() {
+		return "a video or call is playing"
 	}
 	return ""
 }

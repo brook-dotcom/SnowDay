@@ -566,8 +566,8 @@ func monitorTick() {
 
 // a full-screen app or a playing video on this screen ("" = free)
 func screenBusyReason(mons []monitor, m monitor) string {
-	if displayHeldAwake() {
-		return "an app is keeping the screen on" // a video somewhere: can't tell which screen it's on, so hold off
+	if watchingSomething() {
+		return "a video or call is playing" // can't tell which screen it's on, so hold off
 	}
 	var st int32
 	if r, _, _ := pSHQueryUserNotificationState.Call(uintptr(unsafe.Pointer(&st))); r == 0 && (st == 3 || st == 4) {
