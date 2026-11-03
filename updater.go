@@ -105,6 +105,7 @@ func updateDir() string {
 func startUpdateCheck(manual bool) {
 	if !updatesEnabled() || upd.checking || upd.file != "" {
 		if manual && upd.file != "" {
+			upd.manual = true
 			pPostMessageW.Call(app.hwnd, WM_UPDATEREADY, 0, 0)
 		}
 		return
@@ -176,9 +177,23 @@ func checkAndDownload() (string, error) {
 }
 
 // installUpdate swaps the new exe into place and hands over to it. Called on the UI thread.
-func installUpdate() {
-	if upd.file == "" || saver.running || cfgWin.hwnd != 0 {
-		return // try again later (timerUpdate keeps asking)
+// It waits while the full screensaver is showing for someone who's away, but not while single
+// screens snow beside someone who's working (that could be all day), and not when asked for.
+func installUpdate(asked bool) {
+	if upd.file == "" {
+		return
+	}
+	if saver.running {
+		if !asked && !(saver.perMon && !saver.merged) {
+			return // try again later (timerUpdate keeps asking)
+		}
+		stopSaver()
+	}
+	if cfgWin.hwnd != 0 {
+		if !asked {
+			return
+		}
+		closeConfig() // settings save as they change
 	}
 	exe, err := os.Executable()
 	if err != nil {
@@ -232,7 +247,7 @@ var updTicks = 0
 
 func updateTick() {
 	if upd.file != "" {
-		installUpdate()
+		installUpdate(false)
 		return
 	}
 	if updTicks%60 == 0 && app.settings.AutoUpdate {

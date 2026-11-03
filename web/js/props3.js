@@ -245,7 +245,7 @@
     _neckAngle() { return this.neck * 1.05 + Math.sin(this.t * 2.2) * 0.02 + this.nod * Math.sin(this.t * 9) * 0.12; }
     _headLocal() {
       const a = this._neckAngle(), bx = 48, by = -122;
-      const dx = 30, dy = -58;
+      const dx = 32, dy = -66;
       return [bx + dx * Math.cos(a) - dy * Math.sin(a), by + dx * Math.sin(a) + dy * Math.cos(a)];
     }
     drawShadow(ctx) {
@@ -282,36 +282,53 @@
       ctx.save(); ctx.translate(-70, -128 + k * 58); ctx.rotate(-0.6 + this.tail.x);
       ctx.fillStyle = CREAM; ctx.strokeStyle = INK; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.ellipse(0, -8, 7, 12, 0, 0, TAU); ctx.fill(); ctx.stroke(); ctx.restore();
-      // body
+      // body and neck share one outline, so the neck grows out of the body with no seam. Fill the
+      // neck, then the body over its base, then stroke each outline only where it isn't inside the other.
       const by = -112 + k * 58;
+      const ang = this._neckAngle();
+      const neckLocal = new Path2D();
+      neckLocal.moveTo(-30, 18); neckLocal.quadraticCurveTo(-18, -36, 22, -74); // back of the neck
+      neckLocal.lineTo(48, -54);                                                // under the head
+      neckLocal.quadraticCurveTo(36, -18, 20, 12);                              // throat and chest
+      neckLocal.closePath();
+      const neck = new Path2D();
+      neck.addPath(neckLocal, new DOMMatrix().translate(48, -122 + k * 58).rotate(ang * 180 / PI));
+      const body = new Path2D(); body.ellipse(-4, by, 74, 34, 0, 0, TAU);
       const bg = ctx.createLinearGradient(0, by - 36, 0, by + 34);
       bg.addColorStop(0, FUR_L); bg.addColorStop(0.5, FUR); bg.addColorStop(1, FUR_D);
-      ctx.fillStyle = bg; ctx.strokeStyle = INK; ctx.lineWidth = 2.6;
-      ctx.beginPath(); ctx.ellipse(-4, by, 74, 34, 0, 0, TAU); ctx.fill(); ctx.stroke();
-      ctx.save(); ctx.beginPath(); ctx.ellipse(-4, by, 74, 34, 0, 0, TAU); ctx.clip();
+      ctx.save(); ctx.translate(48, -122 + k * 58); ctx.rotate(ang);
+      const ng = ctx.createLinearGradient(0, 8, 0, -60); ng.addColorStop(0, FUR_L); ng.addColorStop(1, FUR);
+      ctx.restore();
+      // the neck gradient lives in neck space: fill it there
+      ctx.save(); ctx.translate(48, -122 + k * 58); ctx.rotate(ang); ctx.fillStyle = ng; ctx.fill(neckLocal); ctx.restore();
+      ctx.fillStyle = bg; ctx.fill(body);
+      ctx.save(); ctx.clip(body);
       ctx.fillStyle = CREAM; ctx.beginPath(); ctx.ellipse(6, by + 30, 56, 14, 0, 0, TAU); ctx.fill();
       ctx.restore();
+      ctx.strokeStyle = INK; ctx.lineWidth = 2.6;
+      const outside = (inner) => { const c = new Path2D(); c.rect(-400, -500, 800, 700); c.addPath(inner); return c; };
+      ctx.save(); ctx.clip(outside(neck), 'evenodd'); ctx.stroke(body); ctx.restore();
+      ctx.save(); ctx.clip(outside(body), 'evenodd'); ctx.stroke(neck); ctx.restore();
       // near legs
       leg(-50, -96, 0, false); leg(44, -96, PI, false);
-      // neck + head (rotate about the base of the neck)
-      ctx.save(); ctx.translate(48, -122 + k * 58); ctx.rotate(this._neckAngle());
-      ctx.fillStyle = FUR; ctx.strokeStyle = INK; ctx.lineWidth = 2.6;
-      ctx.beginPath(); ctx.moveTo(-16, 10); ctx.quadraticCurveTo(-8, -40, 18, -60); ctx.lineTo(42, -50); ctx.quadraticCurveTo(22, -24, 22, 14); ctx.closePath(); ctx.fill(); ctx.stroke();
-      // fluffy cream bib
+      // neck details + head (rotate about the base of the neck)
+      ctx.save(); ctx.translate(48, -122 + k * 58); ctx.rotate(ang);
+      // shaggy cream throat
       ctx.fillStyle = CREAM;
-      ctx.beginPath(); ctx.moveTo(8, 12); ctx.quadraticCurveTo(26, -10, 30, -38); ctx.quadraticCurveTo(18, -14, 0, 14); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(42, -50); ctx.quadraticCurveTo(33, -18, 19, 8); ctx.lineTo(12, 6); ctx.lineTo(16, -2); ctx.lineTo(10, -4);
+      ctx.quadraticCurveTo(25, -20, 32, -46); ctx.closePath(); ctx.fill();
       // collar + bell
-      ctx.strokeStyle = INK; ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(-12, -6); ctx.quadraticCurveTo(4, 2, 24, -8); ctx.stroke();
+      ctx.strokeStyle = INK; ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(-16, -18); ctx.quadraticCurveTo(8, -4, 33, -13); ctx.stroke();
       ctx.strokeStyle = '#c7364a'; ctx.lineWidth = 6; ctx.stroke();
       const bs = Math.sin(this.t * 7) * 0.2 * Math.min(1, Math.abs(this.speed) / 30 + 0.2);
-      ctx.save(); ctx.translate(8, 2); ctx.rotate(bs);
+      ctx.save(); ctx.translate(10, -6); ctx.rotate(bs);
       ctx.fillStyle = '#ffcf3f'; ctx.strokeStyle = INK; ctx.lineWidth = 1.8;
       ctx.beginPath(); ctx.arc(0, 7, 7, 0, TAU); ctx.fill(); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(-5, 9); ctx.lineTo(5, 9); ctx.stroke();
       ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.beginPath(); ctx.arc(-2, 4, 2, 0, TAU); ctx.fill();
       ctx.restore();
       // head
-      ctx.translate(30, -58);
+      ctx.translate(32, -66);
       ctx.rotate(Math.sin(this.t * 14) * 0.22 * this.shake);
       // far antler
       this._antler(ctx, -4, -14, -1, '#a98a63');
