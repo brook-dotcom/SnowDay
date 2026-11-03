@@ -26,7 +26,7 @@ var webFS embed.FS
 var iconFS embed.FS
 
 // appVersion is the release version (CI sets it from the git tag with -ldflags "-X main.appVersion=...")
-var appVersion = "1.3.8"
+var appVersion = "1.4.0"
 
 // buildID is stamped at build time (-ldflags "-X main.buildID=...") so a newer exe can replace a running older one.
 var buildID = "dev"
@@ -124,6 +124,7 @@ func main() {
 	registerClass("SnowDayTrayWnd", trayProc, 0, app.icon)
 	registerSaverClass()
 	registerConfigClass()
+	registerUpdateClass()
 	app.hwnd, _, _ = pCreateWindowExW.Call(0, uintptr(unsafe.Pointer(u16("SnowDayTrayWnd"))), uintptr(unsafe.Pointer(u16("Snow Day"))), 0, 0, 0, 0, 0, 0, 0, hInstance(), 0)
 	tm, _, _ := pRegisterWindowMessageW.Call(uintptr(unsafe.Pointer(u16("TaskbarCreated"))))
 	app.taskbarMsg = uint32(tm)
@@ -157,15 +158,19 @@ func main() {
 
 // ---------- assets ----------
 func extractWeb() error {
-	// a folder per build, so a page from an older build can never be shown
+	// a folder per build, so a page from an older build can never be shown. Older builds' folders
+	// are tidied a minute later: an older copy that's still closing down may need its pages until then.
 	dst := filepath.Join(localDir(), fmt.Sprintf("web-%08x", buildHash()))
-	if olds, _ := filepath.Glob(filepath.Join(localDir(), "web*")); olds != nil {
-		for _, o := range olds {
-			if o != dst {
-				_ = os.RemoveAll(o)
+	go func() {
+		time.Sleep(time.Minute)
+		if olds, _ := filepath.Glob(filepath.Join(localDir(), "web-*")); olds != nil {
+			for _, o := range olds {
+				if o != dst {
+					_ = os.RemoveAll(o)
+				}
 			}
 		}
-	}
+	}()
 	err := fs.WalkDir(webFS, "web", func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -183,6 +188,17 @@ func extractWeb() error {
 	})
 	app.webDir = dst
 	return err
+}
+
+// the pages are on disk before a window opens them (if anything removed them, unpack them again),
+// so a window can never show a "file not found" page
+func ensureWeb() {
+	if _, err := os.Stat(filepath.Join(app.webDir, "saver.html")); err != nil {
+		log.Printf("web files missing (%v): unpacking again", err)
+		if err := extractWeb(); err != nil {
+			log.Printf("unpack failed: %v", err)
+		}
+	}
 }
 
 func fileURL(p string) string {
@@ -289,6 +305,9 @@ func showTrayMenu() {
 	add(idPause, "Paused", pf)
 	pAppendMenuW.Call(m, MF_SEPARATOR, 0, 0)
 	if updatesEnabled() {
+		if upd.file != "" {
+			add(idUpdateNow, "Update to version "+upd.version+"…", 0)
+		}
 		add(idCheckUpdate, "Check for updates", 0)
 	}
 	add(idDiag, "Diagnostics…", 0)
@@ -315,6 +334,8 @@ func showTrayMenu() {
 		updateTrayTip()
 	case idCheckUpdate:
 		startUpdateCheck(true)
+	case idUpdateNow:
+		offerUpdate(true)
 	case idDiag:
 		showDiagnostics()
 	case idExit:
@@ -361,14 +382,19 @@ func trayProc(hwnd, msg, wp, lp uintptr) uintptr {
 		return 0
 	case WM_UPDATEREADY:
 		asked := upd.manual
-		if asked {
-			balloon("Snow Day update", "Installing version "+upd.version+"…")
-			upd.manual = false
+		upd.manual = false
+		if upd.critical {
+			balloon("Snow Day update", "Installing an important fix (version "+upd.version+")…")
+			installUpdate(asked)
+		} else {
+			offerUpdate(asked)
 		}
-		installUpdate(asked)
 		return 0
 	case WM_UPDATEINFO:
 		balloon("Snow Day", upd.lastMsg)
+		return 0
+	case WM_UPDATECHOICE:
+		onUpdateChoice(wp)
 		return 0
 	case WM_TIMER:
 		switch wp {

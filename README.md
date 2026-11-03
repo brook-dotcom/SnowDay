@@ -12,9 +12,9 @@ they dive into the snow as it melts away.
    code-signed: choose **More info → Run anyway**.
 3. Settings open; press **Done** and Snow Day waits in the system tray.
 
-Snow Day updates itself: it checks this repository's releases every hour and quietly swaps in a new
-version when the screensaver isn't showing. You can turn this off in Settings, or use **Check for updates**
-in the tray menu.
+Snow Day checks this repository's releases every hour and offers new versions with what's changed
+(update, remind me later, or skip). Critical fixes install themselves. You can turn checking off in
+Settings, or use **Check for updates** in the tray menu.
 
 Needs Windows 10 or 11 (uses the built-in WebView2).
 
@@ -54,7 +54,10 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 GOFLAGS=-mod=mod GOPROXY=off GOSUMDB=off
 ```
 
 Every push to `main` runs `tools/secret-scan.sh` and builds the exe (`.github/workflows/build.yml`).
-To ship an update, bump `appVersion` in `main.go`: the next push publishes a release for that version,
-and installed copies update themselves.
+To ship an update, bump `appVersion` in `main.go` and add its section to `CHANGELOG.md` (that list is the
+release notes and what the update prompt shows): the next push publishes the release.
+
+Before a release, run `node tools/depth-check.js` (needs Playwright). It plays every scene on three seeds
+and flags penguins standing inside each other or walking through props, with a picture of each.
 
 The penguins, reindeer and scenes are original artwork drawn in code (`web/js/`).

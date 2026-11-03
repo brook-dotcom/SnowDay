@@ -60,9 +60,48 @@
       }
     }
     *walk(p, x, sp = 55) {
+      // a long way across open snow, empty-flippered: penguins often toboggan on their bellies
+      const d = Math.abs(x - p.x);
+      if (d > 320 && this.slides !== false && !p.item && !p.item2 && !p.march && !p.attach && !p.gear &&
+          (p.action === 'none' || !p.action) && p.kind !== 'captain' && p.kind !== 'stranger' && this.r() < 0.35) {
+        yield* this.bellySlide(p, x);
+        return;
+      }
       p.goTo(x, sp);
       const t0 = this.sc.t;
       while (!p.arrived() && this.sc.t - t0 < 90) yield 0;
+      p.target = null;
+    }
+    // run, crouch, dive, slide on the belly (flippers paddling), pop back up, walk the last bit
+    *bellySlide(p, x) {
+      const dir = Math.sign(x - p.x) || 1, w = this.w;
+      p.goTo(p.x + dir * 36, 95);
+      yield* this.until(() => p.arrived(), 3);
+      p.face(dir);
+      yield* this.tween(0.16, (u) => { p.anticip = SD.easeOut(u); }); // anticipation
+      p.anticip = 0;
+      let landed = false;
+      p.onLand = () => { landed = true; };
+      p.jump(-170, dir * 230);
+      yield* this.until(() => landed, 2);
+      const left = Math.abs(x - p.x) - 30;
+      if (left > 40) {
+        const v0 = 250;
+        p.loco = 'prone'; p.vx = dir * v0; p.friction = v0 / left; p.kick = 0.7;
+        w.puff(p.x, p.y, 4, 9, 1, 0.5);
+        let k = 0;
+        yield* this.until(() => {
+          if ((k++ % 9) === 0 && Math.abs(p.vx) > 60) w.puff(p.x - dir * 30, p.y, 1, 6, 0.6, 0.3);
+          return Math.abs(p.vx) < 22 || (x - p.x) * dir < 18;
+        }, 6);
+        p.vx = 0; p.kick = 0;
+        p.loco = 'stand'; p.jump(-130, 0); // and up
+        landed = false; p.onLand = () => { landed = true; };
+        yield* this.until(() => landed, 2);
+      }
+      p.loco = 'stand';
+      p.goTo(x, 60);
+      yield* this.until(() => p.arrived(), 10);
       p.target = null;
     }
     *walkAll(list, xs, sp = 55) {

@@ -63,6 +63,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: CHANGELOG.md
+          sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@v4
         with:
           name: SnowDay
@@ -71,9 +75,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VER: v${{ needs.build.outputs.version }}
         run: |
+          # the release notes are this version's section of CHANGELOG.md; "(critical)" in its
+          # heading makes installed copies update straight away instead of asking
+          awk -v v="${VER#v}" '
+            /^## / { if (inside) exit; h = $0; sub(/^## +/, "", h); split(h, f, " ");
+                     if (f[1] == v) { inside = 1; if (tolower(h) ~ /critical/) print "Critical update"; next } }
+            inside && NF { print }
+          ' CHANGELOG.md > notes.md || true
           if gh release view "$VER" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$VER" --repo "$GITHUB_REPOSITORY" --notes ""
+            gh release edit "$VER" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
             exit 0
           fi
           gh release create "$VER" SnowDay.exe SnowDay.exe.sha256 \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Snow Day $VER" --notes ""
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Snow Day $VER" --notes-file notes.md

@@ -76,7 +76,7 @@
     }
     const seed = (cfg.layout === 'different' ? cfg.seed + cfg.me * 7919 : cfg.seed) >>> 0;
     const world = new SD.World({ W, seed, screens: spans, settings: Object.assign({}, cfg.settings), ledges, drips, overlay: cfg.look === 'live' || cfg.look === 'snapshot' });
-    const areas = spans.map((sp) => ({ x0: sp.x0, x1: sp.x1, primary: !!sp.s.primary }));
+    const areas = spans.map((sp) => ({ x0: sp.x0, x1: sp.x1, primary: !!sp.s.primary, prefer: !!sp.s.prefer }));
     const dirCfg = Object.assign({}, cfg, { seed, sceneSeed: cfg.seed, sceneOffset: cfg.layout === 'different' ? cfg.me : 0 });
     dirCfg.onScene = (n) => post('scene:' + n);
     dirCfg.post = post;
@@ -125,7 +125,11 @@
     let steps = 0;
     let speed = cfg.speed ?? 1; // preview only: 0 = paused
     let simClock = 0, lastNow = Date.now();
-    addEventListener('message', (e) => { if (live() && e.data && typeof e.data.sdSpeed === 'number' && cfg.kind !== 'saver') speed = e.data.sdSpeed; });
+    addEventListener('message', (e) => {
+      if (!live() || !e.data || cfg.kind === 'saver') return;
+      if (typeof e.data.sdSpeed === 'number') speed = e.data.sdSpeed;
+      if (typeof e.data.sdSeek === 'number') SD.seek(e.data.sdSeek);
+    });
     function simStep() {
       director.step(DT);
       world.step(DT);
@@ -138,8 +142,15 @@
     }
     SD.view = () => ({ scale: scale / (window.devicePixelRatio || 1), offY: offY / (window.devicePixelRatio || 1), x0: view.x0 });
     SD.jump = (sec) => { const n = Math.round(sec / DT); for (let i = 0; i < n; i++) simStep(); render(); };
-    SD.wake = () => { const o = document.getElementById('sdOut'); if (o) { o.style.transition = 'opacity .3s'; o.style.opacity = '0'; } director.wake(); document.body.style.cursor = 'default'; setTimeout(() => { if (live()) post('done'); }, 1900); };
+    SD.wake = () => {
+      const o = document.getElementById('sdOut'); if (o) { o.style.transition = 'opacity .3s'; o.style.opacity = '0'; }
+      director.wake(); document.body.style.cursor = 'default';
+      // the last of the snow fades away with everything else, so the window never vanishes in one jump
+      setTimeout(() => { if (live()) { document.body.style.transition = 'opacity .65s ease-in'; document.body.style.opacity = '0'; } }, 1150);
+      setTimeout(() => { if (live()) post('done'); }, 1900);
+    };
     SD.fadeWhite = (sec) => director.fadeWhite(sec);
+    SD.setStage = (on) => { director.stageOn = !!on; };
     // lights out before the screen switches off
     SD.fadeOut = (sec) => {
       let d = document.getElementById('sdOut');
@@ -205,15 +216,17 @@
         it.draw(ctx);
       }
       w.drawParticles(ctx, view, true);
+      if (w.haze > 0.003) {
+        // white-out: a cool white wall of snow (fully opaque at the height of a blizzard). The nearer
+        // flakes are drawn over it, so the blizzard keeps racing past even when nothing else shows.
+        ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+        const g = ctx.createLinearGradient(0, 0, 0, cv.height);
+        g.addColorStop(0, `rgba(214,225,240,${w.haze})`); g.addColorStop(0.6, `rgba(232,239,248,${w.haze})`); g.addColorStop(1, `rgba(244,248,253,${w.haze})`);
+        ctx.fillStyle = g; ctx.fillRect(0, 0, cv.width, cv.height);
+        ctx.restore();
+      }
       w.drawFlakes(ctx, view, 1);
       w.drawFlakes(ctx, view, 2);
-      if (w.haze > 0.003) {
-        // white-out: a cool white wall of snow (fully opaque at the height of a blizzard)
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        const g = ctx.createLinearGradient(0, 0, 0, cv.height);
-        g.addColorStop(0, `rgba(222,232,244,${w.haze})`); g.addColorStop(0.6, `rgba(236,242,250,${w.haze})`); g.addColorStop(1, `rgba(246,249,253,${w.haze})`);
-        ctx.fillStyle = g; ctx.fillRect(0, 0, cv.width, cv.height);
-      }
       if (w.gale > 0.01) drawGale(ctx, w, cv.width, cv.height);
       if (tintEl) tintEl.style.opacity = String(director.tint.toFixed(3));
       if (cfg.fitAll) {
@@ -257,10 +270,26 @@
       c.restore();
     }
 
+    // ---------- seeking (preview timeline) ----------
+    // the simulation is deterministic, so any moment can be reached again by replaying from the start
+    SD.simTime = () => world.t;
+    SD.stepN = (n) => { for (let i = 0; i < n; i++) simStep(); };
+    SD.renderNow = () => render();
+    SD.syncClock = () => { simClock = steps * DT; lastNow = Date.now(); };
+    SD.speedNow = () => speed;
+    let lastReport = 0;
+    function report() {
+      if (cfg.kind === 'saver' || window.parent === window) return;
+      SD.maxT = Math.max(SD.maxT || 0, world.t);
+      const d = director, k = d.sceneName;
+      try { window.parent.postMessage({ sdTime: world.t, sdMax: SD.maxT, sdSeeking: !!SD.seeking, sdScene: (d.phase === 'scene' || d.phase === 'linger') && k && SD.SCENES[k] ? SD.SCENES[k].name : '' }, '*'); } catch (e) {}
+    }
+
     // ---------- main loop ----------
     let first = true;
     function frame() {
       if (!live()) return;
+      if (SD.seeking) { requestAnimationFrame(frame); return; }
       let target;
       if (cfg.kind === 'saver') target = Math.floor((Date.now() - t0) / 1000 / DT); // wall clock keeps screens in sync
       else {
@@ -271,8 +300,9 @@
       }
       let budget = cfg.kind === 'saver' ? 900 : 240;
       while (steps < target && budget-- > 0) simStep();
-      if (steps < target - 2000) steps = target; // hopelessly behind: skip
+      if (cfg.kind === 'saver' && steps < target - 2000) steps = target; // hopelessly behind: skip
       render();
+      const nowR = Date.now(); if (nowR - lastReport > 200) { lastReport = nowR; report(); }
       if (first) { first = false; if (myGen === 1) post('ready'); }
       requestAnimationFrame(frame);
     }
@@ -376,5 +406,26 @@
   };
 
   SD.reboot = (cfg) => { window.__SNOW = cfg; boot(); };
+  // jump to a moment of the preview: forward by playing on fast, back by replaying from the start
+  let seekJob = 0;
+  SD.seek = (t) => {
+    const job = ++seekJob;
+    t = Math.max(0, t);
+    if (t < SD.simTime() - 1e-6) SD.reboot(Object.assign({}, SD.cfg, { speed: SD.speedNow() }));
+    SD.seeking = true;
+    const go = () => {
+      if (job !== seekJob) return;
+      const t0 = performance.now();
+      while (performance.now() - t0 < 14 && SD.simTime() < t - 1e-6) SD.stepN(Math.max(1, Math.min(30, Math.round((t - SD.simTime()) * 60))));
+      SD.renderNow();
+      if (SD.simTime() < t - 1e-6) {
+        try { window.parent.postMessage({ sdTime: SD.simTime(), sdMax: Math.max(SD.maxT || 0, t), sdSeeking: true }, '*'); } catch (e) {}
+        setTimeout(go, 0); return;
+      }
+      SD.seeking = false; SD.syncClock();
+      try { window.parent.postMessage({ sdTime: SD.simTime(), sdMax: Math.max(SD.maxT || 0, SD.simTime()), sdSeeking: false }, '*'); } catch (e) {}
+    };
+    go();
+  };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();

@@ -32,6 +32,7 @@ type screenCfg struct {
 	Ledges  [][3]int32 `json:"ledges"`
 	Bottoms [][3]int32 `json:"bottoms"`
 	Primary bool       `json:"primary"`
+	Prefer  bool       `json:"prefer"` // the penguins' screen
 }
 
 type saverWin struct {
@@ -71,6 +72,7 @@ var saver struct {
 	mergePending bool // every screen is snowing: join them at the next blizzard
 	merging      bool
 	stormWin     *saverWin
+	stageWin     *saverWin // screens snowing on their own: the one with the crew (only ever one)
 }
 
 var saverByHwnd = map[uintptr]*saverWin{}
@@ -254,11 +256,55 @@ func monKey(m monitor) string {
 	return fmt.Sprintf("%d,%d,%d,%d", m.R.Left, m.R.Top, m.R.Right, m.R.Bottom)
 }
 
+// the screen the penguins perform on (Settings: by its place in the list, main screen first)
+func preferredMonitor() monitor {
+	mons := sortedMonitors()
+	if i := activeSettings().Prefer; i > 0 && i < len(mons) {
+		return mons[i]
+	}
+	return mons[0]
+}
+
+// what Settings calls each screen
+func screenNames() []string {
+	mons := sortedMonitors()
+	out := make([]string, len(mons))
+	main := mons[0].R
+	for i, m := range mons {
+		switch {
+		case i == 0:
+			out[i] = "Main screen"
+		case m.R.Right <= main.Left:
+			out[i] = "Screen on the left"
+		case m.R.Left >= main.Right:
+			out[i] = "Screen on the right"
+		case m.R.Bottom <= main.Top:
+			out[i] = "Screen above"
+		default:
+			out[i] = "Screen below"
+		}
+	}
+	// two screens on the same side: number them
+	seen := map[string]int{}
+	for _, n := range out {
+		seen[n]++
+	}
+	k := map[string]int{}
+	for i, n := range out {
+		if seen[n] > 1 {
+			k[n]++
+			out[i] = fmt.Sprintf("%s %d", n, k[n])
+		}
+	}
+	return out
+}
+
 func buildScreens(use []monitor) []screenCfg {
 	ledges, bottoms := windowLedges(use)
 	screens := make([]screenCfg, len(use))
 	for i, m := range use {
-		screens[i] = screenCfg{X: m.R.Left, Y: m.R.Top, W: m.R.Right - m.R.Left, H: m.R.Bottom - m.R.Top, Ledges: ledges[i], Bottoms: bottoms[i], Primary: m.Primary}
+		screens[i] = screenCfg{X: m.R.Left, Y: m.R.Top, W: m.R.Right - m.R.Left, H: m.R.Bottom - m.R.Top, Ledges: ledges[i], Bottoms: bottoms[i], Primary: m.Primary,
+			Prefer: monKey(m) == monKey(preferredMonitor())}
 		if screens[i].Ledges == nil {
 			screens[i].Ledges = [][3]int32{}
 		}
@@ -281,7 +327,7 @@ func saverConfig(s Settings, o saverOpts, bgURL string, screens []screenCfg, me 
 		"kind": "saver", "look": s.Look, "bg": bgURL, "screens": screens, "me": me,
 		"layout": layout, "seed": seed, "start": start, "fast": o.Fast, "force": nil,
 		"settings": map[string]any{
-			"buildMin": s.BuildMin, "intensity": s.Intensity,
+			"buildMin": s.BuildMin, "intensity": s.Intensity, "preferScreen": s.Prefer,
 			"scenes": s.Scenes, "dim": s.Dim, "startle": s.Startle,
 		},
 	}
@@ -349,6 +395,7 @@ func openSaverWindow(m monitor, idx int, s Settings, makeCfg func(bgURL string) 
 	}
 	web.Resize()
 	web.Init("window.__SNOW=" + string(js) + ";")
+	ensureWeb()
 	web.Navigate(fileURL(filepath.Join(app.webDir, "saver.html")))
 	return sw
 }
@@ -360,7 +407,7 @@ func resetSaverState(o saverOpts) {
 	saver.armed = false
 	saver.opts = o
 	saver.started = time.Now()
-	saver.perMon, saver.merged, saver.mergePending, saver.merging, saver.stormWin = false, false, false, false, nil
+	saver.perMon, saver.merged, saver.mergePending, saver.merging, saver.stormWin, saver.stageWin = false, false, false, false, nil, nil
 }
 
 func tidyIfStopped() bool {
@@ -392,7 +439,7 @@ func startSaver(o saverOpts) {
 	mons := sortedMonitors()
 	use := mons
 	if s.Layout == "main" {
-		use = mons[:1]
+		use = []monitor{preferredMonitor()}
 	}
 	screens := buildScreens(use)
 	resetSaverState(o)
@@ -594,10 +641,16 @@ func startMonitorSaver(m monitor) {
 	seed := uint32(time.Now().UnixNano()&0x7fffffff) | 1
 	start := time.Now().Add(1200 * time.Millisecond).UnixMilli()
 	fg, _, _ := pGetForegroundWindow.Call()
+	stage := saver.stageWin == nil // the crew performs on one screen at a time; the others just snow
 	sw := openSaverWindow(m, len(saver.wins), s, func(bg string) map[string]any {
-		return saverConfig(s, saverOpts{}, bg, screens, 0, "mirror", seed, start)
+		cfg := saverConfig(s, saverOpts{}, bg, screens, 0, "mirror", seed, start)
+		cfg["stage"] = stage
+		return cfg
 	}, true)
 	sw.prevFG = fg
+	if stage && saver.running {
+		saver.stageWin = sw
+	}
 	tidyIfStopped()
 	log.Printf("snowing on one screen (%s); %d screen(s) now", monKey(m), len(saver.wins))
 }
@@ -621,6 +674,10 @@ func closeWin(sw *saverWin) {
 		pDeleteDC.Call(sw.snapDC)
 	}
 	act.last[monKey(sw.mon)] = time.Now()
+	if sw == saver.stageWin {
+		saver.stageWin = nil
+		handOverStage()
+	}
 	if saver.mergePending || saver.merging {
 		// someone came back before the screens joined up: carry on separately
 		saver.mergePending, saver.merging, saver.stormWin = false, false, nil
@@ -690,7 +747,7 @@ func doMerge() {
 	if !saver.running || !saver.perMon || saver.merged || !saver.merging {
 		return
 	}
-	saver.mergePending, saver.merging, saver.stormWin = false, false, nil
+	saver.mergePending, saver.merging, saver.stormWin, saver.stageWin = false, false, nil, nil
 	s := app.settings
 	layout := s.Layout
 	if layout == "main" {
@@ -832,6 +889,27 @@ func perMonSaverTick() {
 	leaveScreen(w, true)
 }
 
+// the crew's screen has gone: they carry on on another snowing screen (the preferred one if it's snowing)
+func handOverStage() {
+	if len(saver.wins) == 0 || saver.merged {
+		return
+	}
+	next := saver.wins[0]
+	if w := winOn(preferredMonitor()); w != nil && !w.waking {
+		next = w
+	}
+	for _, w := range saver.wins {
+		if next.waking && !w.waking {
+			next = w
+		}
+	}
+	saver.stageWin = next
+	if next.web != nil && next.web.Ready() {
+		next.web.Eval("window.SD && SD.setStage && SD.setStage(true)")
+	}
+	log.Printf("the crew moves to screen %s", monKey(next.mon))
+}
+
 // a scene spanning two screens is playing in the joined-up world
 func dualSceneShowing() bool {
 	if !saver.merged {
@@ -862,7 +940,15 @@ func leaveScreen(sw *saverWin, startle bool) {
 		}
 		return
 	}
-	saver.merged = false // whatever is left carries on screen by screen
+	if saver.merged {
+		saver.merged = false // whatever is left carries on screen by screen, still with the one crew
+		for _, w := range saver.wins {
+			if w != sw {
+				saver.stageWin = w
+				break
+			}
+		}
+	}
 	if startle {
 		wakeWin(sw)
 	} else {

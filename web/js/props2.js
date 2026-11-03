@@ -403,7 +403,7 @@
     constructor(w, x, lane) { super(w, x, lane); this.page = 0; }
     bbox() { return [this.x - 62, this.y - 170, this.x + 62, this.y + 5]; }
     draw(ctx) {
-      ctx.save(); ctx.globalAlpha = this.alpha; ctx.translate(this.x, this.y);
+      ctx.save(); ctx.globalAlpha = this.alpha; ctx.translate(this.x, this.y); ctx.rotate(this.rot || 0);
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       // legs
       const leg = (x0, x1) => { ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x1, -150); ctx.strokeStyle = INK; ctx.lineWidth = 6; ctx.stroke(); ctx.strokeStyle = '#b07a43'; ctx.lineWidth = 3.4; ctx.stroke(); };

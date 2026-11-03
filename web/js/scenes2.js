@@ -46,15 +46,26 @@
     // a panel of judges nobody has met before, behind a snow desk
     const looks = SD.shuffle(r, SD.STRANGER_LOOKS.slice());
     const hats = SD.shuffle(r, SD.STRANGER_HATS.slice());
-    const desk = S.add(new SD.JudgeTable(w, S.cx, 30, 200));
+    // two of them carry the desk in between them; the third brings up the rear
+    const desk = S.add(new SD.JudgeTable(w, S.offR + 140, 30, 200));
+    desk.lift = 16;
     const judges = [];
     for (let j = 0; j < 3; j++) {
-      const J = S.spawn({ x: S.offR + 40 + j * 50, kind: 'stranger', lane: 26, facing: -1 });
+      const J = S.spawn({ x: j < 2 ? S.offR + 140 + (j ? 92 : -92) : S.offR + 330, kind: 'stranger', lane: 26, facing: -1 });
       J.look = looks[j % looks.length]; J.jhat = hats[j % hats.length]; J.rosette = true;
       judges.push(J);
     }
     const all = [cap, ...teamA, ...teamB, ...judges];
-    yield judges.map((J, j) => S.run((function* () { yield j * 0.4; yield* S.walk(J, S.cx - 58 + j * 58, 70); J.face(j === 0 ? -1 : j === 2 ? 1 : (r() < 0.5 ? -1 : 1)); })()));
+    judges[0].action = judges[1].action = 'hold';
+    let deskMove = true;
+    S.run((function* () { while (deskMove) { desk.x = (judges[0].x + judges[1].x) / 2; yield 0; } })());
+    S.run(S.walk(judges[2], S.cx + 140, 70));
+    yield [S.run(S.walk(judges[0], S.cx - 92, 60)), S.run(S.walk(judges[1], S.cx + 92, 60))];
+    deskMove = false;
+    yield* S.tween(0.4, (u) => { desk.lift = 16 * (1 - SD.easeIn(u)); });
+    w.puff(desk.x, desk.y, 5, 10, 1, 0.5);
+    judges[0].action = judges[1].action = 'none';
+    yield judges.map((J, j) => S.run((function* () { yield j * 0.2; yield* S.walk(J, S.cx - 58 + j * 58, 60); J.face(j === 0 ? -1 : j === 2 ? 1 : (r() < 0.5 ? -1 : 1)); })()));
     // walk in
     S.run(S.walk(cap, S.cx - 175, 70));
     yield [...teamA.map((p, i) => S.run(S.walk(p, xA - 140 - i * 46, 70))), ...teamB.map((p, i) => S.run(S.walk(p, xB + 140 + i * 46, 70)))];
@@ -140,15 +151,16 @@
       cap.face(-ig.door); cap.action = 'point'; yield 0.8; cap.action = 'none';
       if (ig === OI) {
         // crawls inside to inspect
-        cap.laneT = 5.5; yield* S.walk(cap, ig.doorX(), 30);
+        cap.using = ig; cap.laneT = 5.5; yield* S.walk(cap, ig.doorX(), 30);
         yield* S.tween(0.4, (u) => { cap.alpha = 1 - u; });
         yield 1.4;
         yield* S.tween(0.4, (u) => { cap.alpha = u; });
         cap.say('heart', 1.2); cap.laneT = 18;
         yield* S.walk(cap, ig.x + ig.door * (ig.R + 30), 40);
+        cap.using = null;
       } else {
         // too small to get in: the igloo ends up on his head
-        cap.laneT = 5.5; yield* S.walk(cap, lerp(ig.x, ig.doorX(), 0.7), 30);
+        cap.using = ig; cap.laneT = 5.5; yield* S.walk(cap, lerp(ig.x, ig.doorX(), 0.7), 30);
         cap.say('!', 0.8);
         ig.follow = false;
         const holdY = () => { const [hx, hy] = cap.headTop(); return [hx, hy + 6]; };
@@ -166,7 +178,7 @@
         yield* S.tween(0.6, (u) => { ig.x = lerp(ig.x, gx, u); ig.y = lerp(ig.y, S.ground(gx) + 6, SD.easeIn(u)); });
         ig.lane = 6; ig.follow = true; ig.wob.kick(1.5); w.puff(gx, ig.y, 6, 12);
         cap.action = 'none'; loungeTeam.forEach((p) => { p.action = 'none'; });
-        cap.dizzy = 1;
+        cap.dizzy = 1; cap.using = null;
         yield 1.2;
       }
     }
@@ -174,8 +186,14 @@
     cap.laneT = 20;
     yield* S.walk(cap, S.cx - 175, 55);
     const oiTeam = loungeTeam === teamA ? teamB : teamA;
-    const high = judges.map(() => 8 + Math.floor(S.r() * 3));
-    const low = [2 + Math.floor(S.r() * 3), 3 + Math.floor(S.r() * 3), 10]; // one judge loved it anyway
+    // every judge has an opinion: the steady build usually scores better, but not always
+    const scores = (base) => judges.map(() => clamp(base + Math.floor(S.r() * 5) - 2, 1, 10));
+    const high = scores(6 + Math.floor(S.r() * 4));
+    const low = scores(4 + Math.floor(S.r() * 5));
+    const fan = S.r() < 0.4 ? Math.floor(S.r() * 3) : -1; // sometimes one judge adores the underdog
+    if (fan >= 0) low[fan] = 10;
+    const sum = (a) => a.reduce((x, y) => x + y, 0);
+    const winner = sum(high) > sum(low) ? OI : sum(low) > sum(high) ? LI : null; // null: a tie
     for (const [ig, sc] of [[OI, high], [LI, low]]) {
       cap.face(Math.sign(ig.x - cap.x) || 1); cap.action = 'point'; yield 0.9; cap.action = 'none';
       judges.forEach((J) => J.face(Math.sign(ig.x - J.x) || 1));
@@ -186,27 +204,29 @@
         if (sc[j] >= 9) w.sparkle(J.x, J.y - 150, 3, '#ffd43b', 6);
         yield 0.55;
       }
-      if (ig === LI) {
+      if (ig === LI && fan >= 0) {
         // the other two turn and stare at the generous one
-        judges[0].face(1); judges[1].face(1); judges[0].say('?', 1.2); judges[1].say('?', 1.2);
-        judges[2].eyeOverride = 'happy';
-        loungeTeam.forEach((p) => { p.action = 'cheer'; });
-      } else oiTeam.forEach((p) => { p.action = 'cheer'; });
+        judges.forEach((J, j) => { if (j !== fan) { J.face(Math.sign(judges[fan].x - J.x) || 1); J.say('?', 1.2); } });
+        judges[fan].eyeOverride = 'happy';
+      }
+      (ig === LI ? loungeTeam : oiTeam).forEach((p) => { p.action = sum(sc) >= 21 ? 'cheer' : sum(sc) >= 15 ? 'clap' : 'sleepy'; });
       yield 2.2;
       judges.forEach((J) => { J.item = null; J.action = 'none'; J.eyeOverride = null; });
       [...teamA, ...teamB].forEach((p) => { p.action = 'none'; });
       yield 0.6;
     }
-    // winners!
-    S.run(S.tween(0.6, (u) => { OI.flag = 1 + Math.sin(u * PI * 4) * 0.08; }));
-    judges.forEach((J) => { J.face(Math.sign(OI.x - J.x) || 1); J.action = 'clap'; });
-    yield* cheerAll(S, oiTeam, 2.2, 6);
-    loungeTeam.forEach((p) => { p.action = 'clap'; });
-    lounger.say('heart', 1.4);
-    yield 1.6;
+    // winners! (or, on a tie, everyone)
+    const winIgs = winner ? [winner] : [OI, LI];
+    for (const ig of winIgs) S.run(S.tween(0.6, (u) => { ig.flag = 1 + Math.sin(u * PI * 4) * 0.08; }));
+    judges.forEach((J) => { J.face(Math.sign((winner || OI).x - J.x) || 1); J.action = 'clap'; });
+    const winTeam = winner === OI ? oiTeam : winner === LI ? loungeTeam : [...oiTeam, ...loungeTeam];
+    const loseTeam = winner ? (winner === OI ? loungeTeam : oiTeam) : [];
+    loseTeam.forEach((p) => { p.action = 'clap'; });
+    if (winner === LI) lounger.say('heart', 1.4); else if (winner) lounger.say('?', 1.2);
+    yield* cheerAll(S, winTeam, 2.2, 6);
+    yield 1;
     [...all].forEach((p) => { p.action = 'none'; });
-    yield* S.tween(0.5, (u) => { desk.alpha = 1 - u; });
-    desk.dead = true;
+    // the desk stays: the blizzard tidies up
     yield* S.exitAll(all, 62);
   }
 
@@ -492,23 +512,64 @@
   function* sceneFlying(S) {
     const w = S.w, r = S.r;
     const dir = r.sign();
+    const enter = dir > 0 ? S.offL : S.offR;
     const ex = S.cx - dir * S.aw * 0.32;
-    const easel = S.add(new SD.Easel(w, ex, 6)); easel.alpha = 0;
-    const cap = S.spawn({ x: dir > 0 ? S.offL : S.offR, kind: 'captain', lane: 16 });
+    const cap = S.spawn({ x: enter, kind: 'captain', lane: 16 });
     const n = S.crewSize - 1;
     const kids = [];
-    for (let i = 0; i < n; i++) kids.push(S.spawn({ x: (dir > 0 ? S.offL : S.offR) - dir * (80 + i * 55), lane: 12 + (i % 3) * 3 }));
+    for (let i = 0; i < n; i++) kids.push(S.spawn({ x: enter - dir * (80 + i * 55), lane: 12 + (i % 3) * 3 }));
     const all = [cap, ...kids];
-    // a little training hill
+    const pip = byKind(kids, 'pip') || kids[0];
+    const jumper = byKind(kids, 'chubby') || kids[1];
+    const flyer = byKind(kids, 'rocco') || kids[2] || kids[0];
+    const helpers = kids.filter((p) => p !== pip && p !== jumper && p !== flyer);
+    const diggers = (helpers.length >= 2 ? helpers : kids.filter((p) => p !== jumper)).slice(0, 2);
+    const row = (i) => ex + dir * (150 + i * 64);
+    // ---- the captain brings the chalkboard; two of the class dig a practice hill ----
+    const easel = S.add(new SD.Easel(w, enter - dir * 46, 6));
+    easel.lift = 10; easel.rot = -0.16 * dir;
+    let carrying = true;
+    S.run((function* () { while (carrying) { easel.x = cap.x - dir * 46; yield 0; } })());
     const hillX = S.cx + dir * S.aw * 0.08, hillH = 74;
     const base = w.depthAt(hillX);
-    S.run(S.tween(3, (u) => { w.shapeToward(hillX - 130, hillX + 130, (x) => base + hillH * Math.max(0, 1 - ((x - hillX) / 120) ** 2) * SD.smooth(u), 400, S.dt); }));
-    yield* S.walk(cap, ex + dir * 50, 70);
-    cap.face(-dir);
-    yield* S.tween(0.5, (u) => { easel.alpha = u; });
-    cap.face(dir);
-    const row = (i) => ex + dir * (150 + i * 64);
-    yield kids.map((p, i) => S.run((function* () { yield* S.walk(p, row(i), 70); p.face(-dir); })()));
+    let Hcur = 0, digging = true;
+    const hillAt = (x) => base + Hcur * Math.max(0, 1 - ((x - hillX) / 120) ** 2);
+    S.run((function* () { while (digging || w.depthAt(hillX) < base + Hcur - 0.5) { w.shapeToward(hillX - 130, hillX + 130, hillAt, 300, S.dt); yield 0; } })());
+    const digCos = diggers.map((p, i) => S.run((function* () {
+      const side = i === 0 ? -1 : 1;
+      p.laneT = 14 + i * 4;
+      yield* S.walk(p, hillX + side * 150, 80);
+      p.item = SD.items.shovel(['#4a7fd6', '#e2413b'][i]); p.face(-side); p.action = 'shovel';
+      while (Hcur < hillH) {
+        let thrown = false;
+        const item = p.item;
+        yield* S.tween(1.3 + i * 0.12, (u) => {
+          p.cyc = u;
+          if (item) item.full = u > 0.3 && u < 0.62 ? 1 : 0;
+          if (u >= 0.62 && !thrown) {
+            thrown = true;
+            const [hx, hy] = p.localToWorld(30, -105);
+            const tx = hillX + S.r.range(-45, 45), ty = w.surfaceY(tx);
+            const T = 0.75, gg = 900;
+            w.chunk(hx, hy, (tx - hx) / T, (ty - hy - 0.5 * gg * T * T) / T, 5.5, () => { Hcur = Math.min(hillH, Hcur + 5.5); });
+          }
+        });
+        // shuffle a step closer as the pile grows
+        if (Math.abs(p.x - hillX) > 128) p.x -= side * 2;
+      }
+      p.action = 'none'; p.item = null; p.cyc = 0;
+    })()));
+    yield* S.walk(cap, ex + dir * 46, 70);
+    carrying = false;
+    cap.face(-dir); cap.action = 'plant';
+    yield* S.tween(0.45, (u) => { easel.lift = 10 * (1 - u); easel.rot = -0.16 * dir * (1 - SD.easeOut(u)); });
+    w.puff(easel.x, easel.y, 4, 9, 0.8, 0.5);
+    cap.action = 'none'; cap.face(dir);
+    const rest = kids.filter((p) => !diggers.includes(p));
+    yield rest.map((p) => S.run((function* () { yield* S.walk(p, row(kids.indexOf(p)), 70); p.face(-dir); })()));
+    yield digCos;
+    digging = false;
+    yield diggers.map((p) => S.run((function* () { p.laneT = 12 + (kids.indexOf(p) % 3) * 3; yield* S.walk(p, row(kids.indexOf(p)), 80); p.face(-dir); })()));
     // lesson
     cap.face(-dir); cap.action = 'point'; easel.page = 1; yield 1.6;
     cap.face(dir); whistle(S, cap); yield 1;
@@ -518,7 +579,6 @@
     kids.forEach((p) => { p.action = 'flap'; });
     for (let k = 0; k < 3; k++) { kids.forEach((p) => p.jump(-150 - S.r() * 40, 0)); yield 0.7; }
     // the little one actually hovers... for a moment
-    const pip = byKind(kids, 'pip') || kids[0];
     kids.forEach((p) => { if (p !== pip) p.action = 'none'; });
     const gy = pip.groundY();
     let hov = 0;
@@ -534,7 +594,6 @@
     yield 1.8; pip.loco = 'stand';
     kids.forEach((p) => { p.action = 'clap'; }); yield 1.2; kids.forEach((p) => { p.action = 'none'; p.face(-dir); });
     // the hill launch — a belly flop
-    const jumper = byKind(kids, 'chubby') || kids[1];
     jumper.laneT = 0.5;
     yield* S.walk(jumper, hillX - dir * 115, 70);
     yield* S.walk(jumper, hillX, 55);
@@ -548,47 +607,79 @@
     yield* S.until(() => Math.abs(jumper.vx) < 10, 4);
     jumper.vx = 0; yield 0.6; jumper.loco = 'stand'; jumper.kick = 0; jumper.dizzy = 1.4; jumper.laneT = 13;
     yield 1.4;
-    // the seesaw — everyone else steps well clear of it (and of the landing spot) to watch
+    S.run(S.walk(jumper, row(kids.indexOf(jumper)), 60)); // back to the class, out of the way
+    // the seesaw: two of the class fetch it and carry it in over their heads; everyone else watches
+    // from well behind where it'll go (and where Rocco will land)
     const ssx = hillX + dir * 210;
-    const flyer0 = byKind(kids, 'rocco') || kids[2] || kids[0];
-    const watchers = kids.filter((p) => p !== flyer0 && p !== jumper);
-    watchers.forEach((p, j) => { p.laneT = 6 + (j % 2) * 3; p.goTo(ssx + dir * (330 + j * 46), 75); });
+    const low = -dir; // the hill-side end
+    const watchers = kids.filter((p) => p !== flyer && p !== jumper);
+    const porters = watchers.slice(0, 2);
+    watchers.forEach((p, j) => { if (!porters.includes(p)) { p.laneT = 5 + (j % 2) * 3; p.goTo(ssx + dir * (330 + j * 46), 75); } });
+    const far = S.side(dir) + dir * 60;
+    yield porters.map((p) => S.run(S.walk(p, far, 90)));
+    const ss = S.add(new SD.Seesaw(w, far, 10));
+    ss.lift = 70; ss.target = 0; ss.ws.x = 0;
+    porters.forEach((p, i) => { p.laneT = 12; p.x = far + (i ? 1 : -1) * 48; p.action = 'carryUp'; });
+    let porting = true;
+    S.run((function* () { while (porting) { ss.x = (porters[0].x + porters[1].x) / 2; yield 0; } })());
+    yield porters.map((p, i) => S.run(S.walk(p, ssx + (i ? 1 : -1) * 48, 60)));
+    porting = false;
+    yield* S.tween(0.6, (u) => { ss.lift = 70 * (1 - SD.easeIn(u)); });
+    ss.target = 0.28 * low; w.puff(ssx, ss.y, 5, 10, 1, 0.5);
+    // the porters step out in front of the seesaw, then round to join the others at the back
+    yield porters.map((p, j) => S.run((function* () {
+      p.action = 'none'; p.laneT = 17;
+      yield* S.walk(p, ssx + dir * (150 + j * 30), 70);
+      p.laneT = 6 + j * 3;
+      yield* S.walk(p, ssx + dir * (420 + j * 46), 75);
+    })()));
     yield* S.until(() => watchers.every((p) => p.arrived()), 8);
     watchers.forEach((p) => p.face(-dir));
-    const ss = S.add(new SD.Seesaw(w, ssx, 10));
-    // empty, it rests with the hill-side end down
-    ss.target = -0.28 * dir; ss.ws.x = ss.target;
-    const flyer = byKind(kids, 'rocco') || kids[2] || kids[0];
-    const low = -dir; // the hill-side end
-    yield* S.walk(flyer, ss.end(-low)[0] + dir * 30, 70);
+    // Rocco climbs onto the far end (standing on the plank, so in front of it); his weight tips it down
+    flyer.laneT = 18; // round the front of the plank
+    yield* S.walk(flyer, ss.end(-low)[0] + dir * 34, 70);
+    flyer.lane = flyer.laneT = ss.lane + 1;
     yield* S.hop(flyer, () => ss.end(-low), 0.5, 30, true);
-    // the flyer's weight tips his end down; the hill-side end swings up
-    ss.target = 0.28 * dir;
+    ss.target = -0.28 * low;
     flyer.face(-dir); flyer.loco = 'stand';
     if (flyer.kind === 'rocco') { flyer.shadesDown = 1; }
     yield 0.8;
-    // the jumper climbs the hill and drops onto the high end
+    // the jumper climbs the hill and drops onto the raised end
     yield* S.walk(jumper, hillX - dir * 115, 70); jumper.laneT = 0.5;
     yield* S.walk(jumper, hillX, 50);
-    // drops onto the raised end: it slams down and the other end catapults up
+    jumper.lane = jumper.laneT = ss.lane + 1;
     yield* S.hop(jumper, () => ss.end(low), 0.8, 60, true);
-    ss.target = -0.28 * dir; ss.ws.v = -6 * dir; w.puff(ss.end(low)[0], ss.end(low)[1] + 26, 6, 10);
+    ss.target = 0.28 * low; ss.ws.v = 6 * low; w.puff(ss.end(low)[0], ss.end(low)[1] + 26, 6, 10);
     yield 0.06;
-    flyer.attach = null; flyer.loco = 'air'; flyer.action = 'armsOut';
-    flyer.jump(-720, dir * 140);
+    // launch: one tucked somersault, timed to the flight so it finishes exactly as he lands
+    const vy0 = -720, vx0 = dir * 140, G = 1250;
+    const y0 = flyer.y, gyLand = S.ground(flyer.x + vx0 * 1.2) + flyer.lane;
+    const T = (-vy0 + Math.sqrt(vy0 * vy0 + 2 * G * (gyLand - y0))) / G;
+    flyer.attach = null; flyer.loco = 'air'; flyer.action = 'tuck';
+    flyer.jump(vy0, vx0);
     let fl = false;
     flyer.onLand = () => { fl = true; };
-    S.run((function* () { while (flyer.air) { flyer.rot += 0.16 * dir; yield 0; } flyer.rot = 0; })());
+    const t0 = S.sc.t;
+    S.run((function* () {
+      while (!fl) {
+        const u = clamp((S.sc.t - t0) / T, 0, 1);
+        // slow out of the launch, spin fast at the top, open out for the landing
+        flyer.rot = dir * TAU * (u < 0.5 ? 2 * u * u : 1 - 2 * (1 - u) * (1 - u));
+        flyer.action = u > 0.82 ? 'armsOut' : 'tuck';
+        yield 0;
+      }
+      flyer.rot = 0;
+    })());
     yield* S.until(() => fl, 4);
-    flyer.rot = 0; flyer.loco = 'stand'; flyer.action = 'cool'; w.puff(flyer.x, flyer.y, 6, 10);
-    yield 1.2;
+    flyer.rot = 0; flyer.loco = 'stand'; flyer.action = 'cool'; flyer.land.kick(-6);
+    w.puff(flyer.x, flyer.y, 6, 10);
+    flyer.laneT = 12;
+    kids.forEach((p) => { if (p !== flyer) { p.face(Math.sign(flyer.x - p.x) || 1); p.action = 'clap'; } });
+    yield 2;
     flyer.action = 'none';
-    yield* S.tween(0.35, (u) => { flyer.rot = -1.45 * flyer.facing * SD.easeIn(u); });
-    w.puff(flyer.x - flyer.facing * 30, flyer.y, 5, 10); flyer.dizzy = 1.6;
-    kids.forEach((p) => { if (p !== flyer) p.action = 'clap'; });
-    yield 1.6;
-    yield* S.tween(0.4, (u) => { flyer.rot = -1.45 * flyer.facing * (1 - u); });
-    jumper.attach = null; jumper.loco = 'stand'; jumper.y = jumper.groundY(); jumper.laneT = 13;
+    // the jumper hops off the plank, out in front of it
+    jumper.lane = jumper.laneT = 18;
+    yield* S.hop(jumper, () => [ss.x - dir * 96, S.ground(ss.x - dir * 96) + 18], 0.5, 30);
     kids.forEach((p) => { p.action = 'none'; });
     // balloons
     const lofty = kids.find((p) => p !== pip && p !== jumper && p !== flyer) || pip;
@@ -621,12 +712,13 @@
     glider.laneT = 0.5;
     yield* S.walk(glider, hillX - dir * 115, 70);
     yield* S.walk(glider, hillX, 50);
-    glider.face(dir); glider.item = SD.items.umbrella('#3c7fd8'); glider.item.open = 0; glider.action = 'carryUp';
+    glider.face(-dir); glider.item = SD.items.umbrella('#3c7fd8'); glider.item.open = 0; glider.action = 'carryUp';
     yield* S.tween(0.6, (u) => { glider.item.open = u; });
     glider.armF = PI - 0.25;
     const sx0 = glider.x, sy0 = glider.y;
     let k2 = 0;
-    glider.attach = () => ({ x: sx0 + dir * 260 * k2 + Math.sin(k2 * 10) * 14, y: lerp(sy0, S.ground(sx0 + dir * 260 * k2) + 12, SD.smooth(k2)) - Math.sin(k2 * PI) * 50, rot: Math.sin(k2 * 10) * 0.12 });
+    glider.face(-dir); // off the class side of the hill, well away from the seesaw
+    glider.attach = () => ({ x: sx0 - dir * 260 * k2 + Math.sin(k2 * 10) * 14, y: lerp(sy0, S.ground(sx0 - dir * 260 * k2) + 12, SD.smooth(k2)) - Math.sin(k2 * PI) * 50, rot: Math.sin(k2 * 10) * 0.12 });
     yield* S.tween(4.5, (u) => { k2 = u; });
     glider.attach = null; glider.rot = 0; glider.y = glider.groundY(); glider.laneT = 13;
     glider.armF = null; glider.item = null;
@@ -639,8 +731,7 @@
     yield 2;
     glider.item = null;
     yield* cheerAll(S, all, 1.6, 4);
-    yield* S.tween(0.5, (u) => { easel.alpha = 1 - u; ss.alpha = 1 - u; });
-    easel.dead = true; ss.dead = true;
+    // the hill, board and seesaw stay where they are: the blizzard tidies up
     yield* S.exitAll(all, 62);
   }
 

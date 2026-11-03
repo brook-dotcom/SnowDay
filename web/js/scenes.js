@@ -321,9 +321,9 @@
     yield 0.5;
     // salute wave
     leader.action = 'point';
-    for (const p of bearers) { p.action = 'armsUp'; yield 0.22; }
+    // a hop runs down the line like a wave (canes stay shouldered, clear of faces and neighbours)
+    for (const p of bearers) { p.jump(-190, 0); p.say('heart', 0.6); yield 0.2; }
     yield 1.0;
-    for (const p of bearers) { p.action = 'carryShoulder'; yield 0.12; }
     leader.action = 'baton';
     yield 0.6;
     // plant a cane fence
@@ -367,6 +367,13 @@
     const fans = band.filter((p) => p !== h1 && p !== h2 && !performers.includes(p));
     // the near holder stands on the exit side, so a dancer's trailing head and body stay in view as
     // they cross, and only their feet slip behind the near holder
+    // everyone takes their places first (the dancers cross where the bar will be before it's there)
+    const queueX = bx - wd * 210;
+    const qLane = (i) => PASS - 1 + (i % 2) * 2;
+    performers.forEach((p, i) => { p.action = 'none'; p.item = null; p.laneT = qLane(i); p.goTo(queueX - wd * i * 50, 65); });
+    fans.forEach((p, j) => { p.action = 'none'; p.item = null; p.laneT = 6 + (j % 2) * 2; p.goTo(bx + wd * (210 + j * 44), 65); });
+    yield* S.until(() => performers.every((p) => p.arrived()), 30);
+    performers.forEach((p) => p.face(wd));
     h1.laneT = NEAR; h2.laneT = FAR;
     S.run(S.walk(h1, bx + wd * 56, 60));
     yield* S.walk(h2, bx - wd * 46, 60);
@@ -377,11 +384,6 @@
     const bar = S.add(new SD.Bar(w, h1, h2, 0, 0.5)); bar.lane = (NEAR + PASS) / 2;
     const barFar = S.add(new SD.Bar(w, h1, h2, 0.5, 1)); barFar.lane = (PASS + FAR) / 2;
     const cross = () => bar.atLane(PASS); // where a dancer passes under
-    const queueX = bx - wd * 210;
-    const qLane = (i) => PASS - 1 + (i % 2) * 2;
-    performers.forEach((p, i) => { p.action = 'none'; p.item = null; p.laneT = qLane(i); p.goTo(queueX - wd * i * 50, 65); });
-    fans.forEach((p, j) => { p.action = 'none'; p.item = null; p.laneT = 6 + (j % 2) * 2; p.goTo(bx + wd * (210 + j * 44), 65); });
-    yield* S.until(() => performers.every((p) => p.arrived()), 30);
     fans.forEach((p) => { p.face(-wd); p.action = 'clap'; });
     performers.forEach((p) => p.face(wd));
     // the bar starts at chest height and drops each round

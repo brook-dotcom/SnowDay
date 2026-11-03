@@ -11,7 +11,8 @@
       this.world = world; this.x = x; this.lane = lane; this.y = world.surfaceY(x) + lane;
       this.alpha = 1; this.dead = false; this.rot = 0; this.follow = true; this.t = 0;
     }
-    update(dt) { this.t += dt; if (this.follow) this.y = this.world.surfaceY(this.x) + this.lane; }
+    // lift: raised off the snow (being carried)
+    update(dt) { this.t += dt; if (this.follow) this.y = this.world.surfaceY(this.x) + this.lane - (this.lift || 0); }
     draw() {}
     reflect() { return true; }
   }
@@ -697,7 +698,12 @@
   SD.items = {
     // shouldered like a marching band: gripped low in the near flipper, in front of the body, leaning
     // back past the side of the head so the hook rests behind it (the flipper is drawn over the grip)
-    cane: (len = 96) => ({ at: 'front', draw(ctx, p, hx, hy) { ctx.translate(hx, hy); ctx.rotate(-0.42 + Math.sin(p.phase) * 0.03); ctx.translate(0, 16); drawCane(ctx, len, 13, 8, 1); } }),
+    // (presenting it, the cane points forward and up below the beak, never across the face)
+    cane: (len = 96) => ({ at: 'front', draw(ctx, p, hx, hy) {
+      ctx.translate(hx, hy);
+      if (p.action === 'presentCane') { ctx.rotate(1.05); ctx.translate(0, 10); drawCane(ctx, len, 13, 8, -1); return; }
+      ctx.rotate(-0.42 + Math.sin(p.phase) * 0.03); ctx.translate(0, 16); drawCane(ctx, len, 13, 8, 1);
+    } }),
     baton: () => ({ at: 'front', draw(ctx, p, hx, hy, a) {
       ctx.translate(hx, hy); ctx.rotate(p.t * 9);
       ctx.lineCap = 'round'; ctx.strokeStyle = INK; ctx.lineWidth = 5.5; ctx.beginPath(); ctx.moveTo(-26, 0); ctx.lineTo(26, 0); ctx.stroke();

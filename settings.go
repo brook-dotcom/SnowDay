@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
 
 	"golang.org/x/sys/windows/registry"
 )
@@ -16,6 +17,9 @@ type Settings struct {
 	Intensity  string          `json:"intensity"`
 	Look       string          `json:"look"`
 	Layout     string          `json:"layout"`
+	SkipUpdate string          `json:"skipUpdate"`   // a version the user chose to skip
+	RemindAt   time.Time       `json:"remindAt"`     // "remind me later": not before this
+	Prefer     int             `json:"preferScreen"` // the screen the penguins perform on (0 = main, in Settings order); -1 = any
 	Scenes     map[string]bool `json:"scenes"`
 	Dim        int             `json:"dim"`
 	Startle    bool            `json:"startle"`
@@ -90,9 +94,12 @@ func (s *Settings) sanitize() {
 		s.Look = d.Look
 	}
 	switch s.Layout {
-	case "span", "mirror", "different", "main":
+	case "span", "main":
 	default:
-		s.Layout = d.Layout
+		s.Layout = d.Layout // "same on each" / "different on each" are gone: only ever one crew
+	}
+	if s.Prefer < -1 || s.Prefer > 8 {
+		s.Prefer = 0
 	}
 	if s.Scenes == nil {
 		s.Scenes = d.Scenes

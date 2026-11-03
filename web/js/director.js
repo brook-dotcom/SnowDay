@@ -40,6 +40,9 @@
         this.tint = this.tintTarget = (this.s.dim ?? 22) / 100;
       }
       this.firstHere = !!cfg.preferPrimary; // the first scene after joining plays on the main screen
+      // only one crew at a time: a screen snowing on its own while another hosts the crew just snows
+      this.stageOn = cfg.stage !== false;
+      this.anyScreen = !!(cfg.settings && cfg.settings.preferScreen < 0);
     }
 
     post(m) { if (this.cfg.post) this.cfg.post(m); }
@@ -53,7 +56,8 @@
       this.phase = 'storm'; this.pt = Math.max(0, PEAK - sec); this._peak = false; this._hold = 0;
       this._rampFrom = this.pt; this._hz0 = this.w.haze;
     }
-    primaryArea() { return this.areas.find((a) => a.primary) || this.areas[0]; }
+    // the screen the penguins prefer (Settings), else the main screen
+    primaryArea() { return this.areas.find((a) => a.prefer) || this.areas.find((a) => a.primary) || this.areas[0]; }
 
     // which scenes can play here: two-screen scenes need two screens side by side,
     // window parkour needs real windows to run along
@@ -98,6 +102,10 @@
       if (sc.dual && this.dualAreas.length) area = this.dualAreas[Math.floor(this.r() * this.dualAreas.length)];
       else if (sc.needsLedges) area = this.areas.find((a) => SD.parkourCourse(this.w, a)) || this.areas[0];
       else area = this.areas[Math.floor(this.r() * this.areas.length)];
+      if (!sc.dual && !this.anyScreen && this.areas.length > 1) {
+        const pa = this.primaryArea();
+        if (!sc.needsLedges || SD.parkourCourse(this.w, pa)) area = pa;
+      }
       if (this.firstHere && !sc.dual) {
         const pa = this.primaryArea();
         if (!sc.needsLedges || SD.parkourCourse(this.w, pa)) area = pa;
@@ -129,7 +137,7 @@
       this.sc.killAll();
       const w = this.w, r = this.r;
       w.snowfall = 0;
-      w.haze = Math.min(w.haze, 0.4); w.gale = Math.min(w.gale, 0.3);
+      // (a white-out clears smoothly in the wake phase rather than snapping away)
       const ps = w.actors.slice();
       ps.forEach((p, i) => {
         if (p.inVehicle) { p.inVehicle = false; p.attach = null; p.size = 0.66; p.y -= 30; }
@@ -183,7 +191,14 @@
           w.accum = 0;
           w.flatten = 0.9 * smooth(this.pt / 2);
           w.snowfall = lerp(w.snowfall, 0.42, dt * 0.5);
-          if (this.pt > 6.5) { w.flatten = 0.02; this.startScene(); }
+          if (this.pt > 6.5) { w.flatten = 0.02; if (this.stageOn) this.startScene(); else { this.phase = 'idle'; this.pt = 0; } }
+          break;
+        }
+        case 'idle': {
+          // just snow: the crew is on another screen (they may come here next)
+          w.accum = 0; w.flatten = 0.02;
+          w.snowfall = lerp(w.snowfall, 0.45, dt * 0.3);
+          if (this.stageOn && this.pt > 2) this.startScene();
           break;
         }
         case 'scene': {
@@ -212,7 +227,7 @@
           w.gale = t < 8.4 ? (rf != null ? smooth((t - rf) / Math.max(0.5, (PEAK - rf) * 0.6)) : smooth((t - 0.3) / 3.2)) : 1 - smooth((t - 8.4) / 4);
           if (t >= 7.2 && !this._peak) { this._peak = true; this.post('stormpeak'); }
           // waiting for the other screens to join this world (gives up after a few seconds)
-          if (SD.mergePending && t >= 7.6 && t < 8.2 && (this._hold = (this._hold || 0) + dt) < 6) this.pt = 7.6;
+          if (SD.mergePending && t >= 7.6 && t < 8.2 && (this._hold = (this._hold || 0) + dt) < 2.5) this.pt = 7.6;
           if (t > 13) { w.haze = 0; w.gale = 0; this._cleared = false; this._rampFrom = null; w.windBase = 8; this.phase = 'flatten'; this.pt = 3; }
           break;
         }

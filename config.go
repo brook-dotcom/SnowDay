@@ -113,12 +113,13 @@ func openConfig() {
 		_ = st.PutIsZoomControlEnabled(false)
 	}
 	web.Resize()
-	init := map[string]any{"settings": app.settings, "version": appVersion, "screens": len(mons), "updates": updatesEnabled()}
+	init := map[string]any{"settings": app.settings, "version": appVersion, "screens": len(mons), "screenNames": screenNames(), "updates": updatesEnabled()}
 	if cap, why := powerCap(); why != "" {
 		init["idleCap"] = map[string]any{"sec": int(cap / time.Second), "why": why}
 	}
 	js, _ := json.Marshal(init)
 	web.Init("window.__INIT=" + string(js) + ";")
+	ensureWeb()
 	web.Navigate(fileURL(filepath.Join(app.webDir, "config.html")))
 	web.Focus()
 }

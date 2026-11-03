@@ -103,6 +103,7 @@
       this.pomY = new SD.Spring(0, 160, 8);
       this.tail = new SD.Spring(0, 40, 5);
       this.hatLift = new SD.Spring(0, 90, 7);
+      this.land = new SD.Spring(0, 240, 11); // squash on landing (negative = squashed)
       this.p = {}; this.tp = {};
       for (const k of POSE_KEYS) { this.p[k] = 0; this.tp[k] = 0; }
       this.p.sq = this.tp.sq = 1;
@@ -143,7 +144,10 @@
     update(dt) {
       const w = this.world;
       this.t += dt;
-      this.lane = damp(this.lane, this.laneT, 3, dt);
+      // laneOff: a passing step in front of / behind someone in the way (see personalSpace)
+      this.laneOff = damp(this.laneOff || 0, this.dodge || 0, 5, dt);
+      this.lane = damp(this.lane, this.laneT + this.laneOff, 3, dt);
+      if (this.dodgeT > 0) { this.dodgeT -= dt; if (this.dodgeT <= 0) this.dodge = 0; }
       const oldX = this.x, oldY = this.y;
 
       if (this.attach) {
@@ -156,6 +160,7 @@
         this.x += this.vx * dt; this.y += this.vy * dt;
         const gy = this.groundY();
         if (this.vy > 0 && this.y >= gy && !this.noLand) {
+          this.land.kick(-Math.min(9, this.vy / 90)); // the harder the landing, the bigger the squash
           this.y = gy; this.air = false; this.ground = true; this.vy = 0; this.vx = 0;
           this.pomY.kick(60); this.hatLift.kick(-20);
           if (this.onLand) { const f = this.onLand; this.onLand = null; f(this); }
@@ -174,7 +179,7 @@
       } else {
         if (this.target != null) {
           const d = this.target - this.x;
-          const step = Math.min(Math.abs(d), this.speed * dt * (this.noHurry ? 1 : this.K.speed * (w.speedMul ? w.speedMul(this.x) : 1)));
+          const step = Math.min(Math.abs(d), this.speed * dt * (this.crowd ?? 1) * (this.noHurry ? 1 : this.K.speed * (w.speedMul ? w.speedMul(this.x) : 1)));
           if (Math.abs(d) < 0.5) { this.x = this.target; this.target = null; }
           else {
             this.x += Math.sign(d) * step;
@@ -227,6 +232,7 @@
       this.pomY.step(0, dt);
       this.tail.step(clamp(-this.vxEst * 0.006 * this.facing, -1.4, 0.4) + Math.sin(this.t * 2.1 + this.id) * 0.06 - w.wind * 0.002 * this.facing, dt);
       this.hatLift.step(0, dt);
+      this.land.step(0, dt);
       const bobDelta = this.p.bob - (this._lastBob || 0); this._lastBob = this.p.bob;
       this.pomY.kick(-bobDelta * 2.2);
     }
@@ -314,9 +320,12 @@
           break;
         case 'air':
           P.fFy = -6; P.fBy = -4; P.aF = 1.2; P.aB = -1.2;
+          P.sq = 1 + clamp(Math.abs(this.vy || 0) / 7000, 0, 0.1); // stretched by speed
           break;
       }
 
+      // anticipation: a quick crouch and lean before a dive or a jump
+      if (this.anticip) { P.crouch = Math.max(P.crouch, this.anticip * 0.9); P.lean += this.anticip * 0.35; P.aF = lerp(P.aF, 1.6, this.anticip); P.aB = lerp(P.aB, -1.6, this.anticip); P.sq *= 1 - this.anticip * 0.08; }
       // personality in the gait
       const kind = this.kind;
       if (this.loco === 'walk') {
@@ -357,6 +366,7 @@
         case 'carryLadder': P.aF = -1.3; P.aB = -1.4; P.lean = -0.04; P.bob += Math.sin(ph) * 0.6; break;
         case 'hold': P.aF = -0.8; break;
         case 'carryShoulder': P.aF = -0.55; P.aB = -0.25; break;
+        case 'presentCane': P.aF = -1.05; P.aB = -0.25; P.lean = -0.04; break;
         case 'push': P.lean = 0.3; P.aF = -1.35; P.aB = -1.5; break;
         case 'cheer':
           P.bob += -Math.abs(Math.sin(t * 7.5 + this.id)) * 10; P.aF = PI - 0.35 + Math.sin(t * 15) * 0.25; P.aB = -(PI - 0.35) - Math.sin(t * 15 + 1) * 0.25;
@@ -378,6 +388,7 @@
         case 'flail': P.aF = 2 + Math.sin(t * 19) * 0.8; P.aB = -2 + Math.sin(t * 17) * 0.8; eyes = 'wide'; P.beak = 1; break;
         case 'armsUp': P.aF = PI - 0.25; P.aB = -(PI - 0.25); P.beak = 0.9; eyes = 'happy'; break;
         case 'armsOut': P.aF = 1.55; P.aB = -1.55; break;
+        case 'tuck': P.aF = -2.2; P.aB = -2.3; P.crouch = 0.8; P.fFy = -10; P.fBy = -10; P.fFx = 8; P.fBx = 10; eyes = 'closed'; break;
         case 'reach': {
           if (this.reachTo) {
             const lp = this.toLocal(this.reachTo[0], this.reachTo[1]);
@@ -428,6 +439,8 @@
         else if (key === 'bob' || key.startsWith('f')) this.p[key] = damp(this.p[key], P[key], 22, dt);
         else this.p[key] = damp(this.p[key], P[key], k, dt);
       }
+      // squash on landing goes straight on (no smoothing), springing back with a little overshoot
+      if (this.land) this.p.sq = Math.max(0.78, this.p.sq * (1 + this.land.x * 0.022));
     }
 
     // world -> penguin local (ignores rotation, fine for reach targets)
@@ -450,7 +463,7 @@
       const p = this.p, s = this.size;
       const r = (p.lean + p.roll + this.rot) * Math.sign(this.fx || 1);
       const fx = this.fx;
-      const x0 = lx * fx * s * this.K.kx, y0 = ly * s * p.sq * this.K.ky;
+      const x0 = lx * fx * s * this.K.kx / Math.sqrt(p.sq), y0 = ly * s * p.sq * this.K.ky;
       const c = Math.cos(r), sn = Math.sin(r);
       return [this.x + x0 * c - y0 * sn, this.y + p.bob + x0 * sn + y0 * c];
     }
@@ -489,7 +502,7 @@
       let sx = Math.abs(this.fx) < 0.12 ? 0.12 * dir : this.fx;
       if (this.spin) sx *= Math.cos(this.spin);
       ctx.rotate((p.lean + p.roll) * dir + this.rot);
-      ctx.scale(sx * s * this.K.kx, s * p.sq * this.K.ky);
+      ctx.scale(sx * s * this.K.kx / Math.sqrt(p.sq), s * p.sq * this.K.ky);
       // prone rotation around belly center
       if (p.prone > 0.001) {
         ctx.translate(0, -2 * p.prone);
@@ -614,7 +627,7 @@
       this._flipper(ctx, -20, -58, p.aF, false);
       if (this.item && this.item.at === 'up') {
         // carried things rest on whatever is on top of the head
-        ctx.translate(0, -131 - this.headTopLocal());
+        ctx.translate(0, 131 + this.headTopLocal()); // shorter heads: the load sits lower, right on top
         this._drawItem(ctx, this.item, 'F');
       }
       if (this.item2 && this.item2.at !== 'back') this._drawItem(ctx, this.item2, this.item2.hand || 'F');
@@ -706,15 +719,20 @@
       const down = this.tic && this.tic.n === 'shades' ? (this.shadesDown ? 1 - this.tic.t / this.tic.d : this.tic.t / this.tic.d) : this.shadesDown;
       const y = lerp(-95, -67.2, SD.smooth(down));
       ctx.save(); ctx.translate(0, y); ctx.rotate(lerp(-0.12, 0, down));
-      ctx.strokeStyle = INK; ctx.lineWidth = 2;
+      // red frames, so the dark lenses read against his dark head
+      const RED = '#e2363f';
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = INK; ctx.lineWidth = 4.4;
       ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(24, -1); ctx.stroke();
+      ctx.strokeStyle = RED; ctx.lineWidth = 2.4; ctx.stroke();
       for (const [cx, w] of [[-2.5, 8.5], [16.5, 10.5]]) {
         ctx.beginPath(); SD.rrect(ctx, cx - w / 2 - 0.4, -5.6, w + 1.2, 11, 4);
         const lg = ctx.createLinearGradient(0, -4, 0, 5); lg.addColorStop(0, '#3a3f52'); lg.addColorStop(1, '#0d0f14');
-        ctx.fillStyle = lg; ctx.fill(); ctx.stroke();
+        ctx.fillStyle = lg; ctx.fill();
+        ctx.strokeStyle = INK; ctx.lineWidth = 4.4; ctx.stroke();
+        ctx.strokeStyle = RED; ctx.lineWidth = 2.4; ctx.stroke();
         ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1.2;
         ctx.beginPath(); ctx.moveTo(cx - w * 0.25, -1.5); ctx.lineTo(cx + w * 0.05, -2.2); ctx.stroke();
-        ctx.strokeStyle = INK; ctx.lineWidth = 2;
       }
       ctx.restore();
     }
@@ -1171,6 +1189,27 @@
       if (p.loco !== 'stand' || p.target != null || p.action === 'hug' || p.limbo) continue;
       if (Math.abs(p.y - p.groundY()) > 2) continue;
       free.push(p);
+    }
+    // walkers step round people in their way (in front if they're nearer, behind if not) instead of
+    // walking through them; a line all walking the same way (a march, a queue) is left alone
+    // someone walking the same way just ahead: keep a step behind them (no walking into their back)
+    for (const a of actors) {
+      if (!(a instanceof Penguin)) continue;
+      a.crowd = 1;
+      if (a.dead || a.hidden || a.attach || a.target == null || a.loco !== 'walk' || a.snug) continue;
+      const dir = Math.sign(a.target - a.x);
+      if (!dir) continue;
+      for (const b of actors) {
+        if (b === a || !(b instanceof Penguin) || b.dead || b.hidden || b.attach || b.snug) continue;
+        const ahead = (b.x - a.x) * dir;
+        if (ahead < -10 || ahead > 80 || Math.abs(a.target - a.x) < 20) continue;
+        if (Math.abs(a.lane - b.lane) > 6) continue;
+        if (b.target != null && Math.sign(b.target - b.x) === dir) {
+          if (ahead > 0 && ahead < 46 * (a.size + b.size) / 1.48 && Math.abs(b.target - b.x) > 10) a.crowd = Math.min(a.crowd, 0.25);
+          continue;
+        }
+        a.dodge = 8; a.dodgeT = 0.9; // pass in front of them, nearer the viewer
+      }
     }
     free.sort((a, b) => a.x - b.x || a.id - b.id);
     for (let i = 0; i < free.length; i++) {

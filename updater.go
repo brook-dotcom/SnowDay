@@ -40,6 +40,8 @@ var upd struct {
 	checking bool
 	file     string // verified download waiting to be installed
 	version  string
+	notes    string // what's new (the release notes)
+	critical bool   // installs without asking
 	manual   bool
 	lastMsg  string
 }
@@ -69,6 +71,7 @@ func newerThan(a, b string) bool {
 
 type ghRelease struct {
 	Tag    string `json:"tag_name"`
+	Body   string `json:"body"`
 	Draft  bool   `json:"draft"`
 	Pre    bool   `json:"prerelease"`
 	Assets []struct {
@@ -140,6 +143,9 @@ func checkAndDownload() (string, error) {
 	if rel.Draft || rel.Pre || !newerThan(rel.Tag, appVersion) {
 		return "Snow Day is up to date (v" + appVersion + ").", nil
 	}
+	if !upd.manual && strings.TrimPrefix(rel.Tag, "v") == app.settings.SkipUpdate && !strings.HasPrefix(strings.ToLower(strings.TrimSpace(rel.Body)), "critical update") {
+		return "", nil // skipped: only offered again if asked for from the tray
+	}
 	var exeURL, sumURL string
 	var exeSize int64
 	for _, a := range rel.Assets {
@@ -172,7 +178,9 @@ func checkAndDownload() (string, error) {
 		return "", err
 	}
 	upd.file, upd.version = f, ver
-	log.Printf("update %s downloaded and verified", ver)
+	upd.notes = strings.TrimSpace(rel.Body)
+	upd.critical = strings.HasPrefix(strings.ToLower(upd.notes), "critical update")
+	log.Printf("update %s downloaded and verified (critical: %v)", ver, upd.critical)
 	return "", nil
 }
 
@@ -195,6 +203,7 @@ func installUpdate(asked bool) {
 		}
 		closeConfig() // settings save as they change
 	}
+	closeUpdateWin()
 	exe, err := os.Executable()
 	if err != nil {
 		return
@@ -242,12 +251,17 @@ func copyFile(src, dst string) error {
 	return out.Close()
 }
 
-// every minute: install a waiting update when the coast is clear; check GitHub every hour
+// every minute: install a critical update when the coast is clear, or offer a normal one when
+// someone's at the PC; check GitHub every hour
 var updTicks = 0
 
 func updateTick() {
 	if upd.file != "" {
-		installUpdate(false)
+		if upd.critical {
+			installUpdate(false)
+		} else {
+			offerUpdate(false)
+		}
 		return
 	}
 	if updTicks%60 == 0 && app.settings.AutoUpdate {

@@ -63,6 +63,14 @@
   body.full .over.pick { left: 20px; }
   body.full .over.speed { right: 20px; }
   body.full.still .over { opacity: 0; pointer-events: none; }
+  /* timeline (full screen): drag back to any moment that has played, or ahead */
+  .over.timeline { display: none; }
+  body.full .over.timeline { display: flex; top: auto; bottom: 20px; left: 20px; right: 20px; height: 40px; padding: 0 14px; gap: 12px; }
+  .timeline .tm { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 38px; text-align: center; color: #eef1f5; }
+  .timeline input { flex: 1; appearance: none; -webkit-appearance: none; height: 4px; border-radius: 2px; cursor: pointer;
+    background: linear-gradient(to right, #4aa3df var(--tp, 0%), rgba(255,255,255,0.25) var(--tp, 0%)); }
+  .timeline input::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.3); }
+  .timeline.busy .tm#tlNow { color: #4aa3df; }
   body.full.still { cursor: none; }
 
   .label { color: var(--mute); font-size: 12px; font-weight: 600; line-height: 16px; margin: 14px 0 6px; }
@@ -96,6 +104,7 @@
   .row .t span { display: block; }
   .row .t small { display: block; color: var(--mute); font-size: 12px; line-height: 16px; }
   .row .t small[hidden] { display: none; }
+  h2[hidden], .group[hidden] { display: none; }
   .ctl { display: flex; align-items: center; gap: 10px; flex: none; }
 
   /* slider */
@@ -180,6 +189,11 @@
           <button data-s="0" aria-label="Pause"><svg><use href="#i-pause"/></svg></button><button data-s="1">1×</button><button data-s="4">4×</button><button data-s="16">16×</button>
           <i class="sep"></i><button id="pvFull" aria-label="Full screen" title="Full screen"><svg><use id="pvFullIcon" href="#i-expand"/></svg></button>
         </div>
+        <div class="over timeline" id="tl">
+          <span class="tm" id="tlNow">0:00</span>
+          <input type="range" id="tlBar" min="0" max="1" step="0.02" value="0" aria-label="Timeline">
+          <span class="tm" id="tlMax">0:00</span>
+        </div>
       </div>
       <div class="label" id="scenesLabel">Scenes</div>
       <div class="scenes" id="scenes" role="group" aria-labelledby="scenesLabel"></div>
@@ -207,10 +221,12 @@
           <div class="ctl"><input type="range" id="dim" min="0" max="60" step="2"><output id="dimOut"></output></div></div>
       </div>
 
-      <h2>Screens</h2>
-      <div class="group">
-        <div class="row"><label class="t" for="layout">Multiple screens</label>
-          <div class="sel"><select id="layout"><option value="span">One big scene</option><option value="mirror">Same on each</option><option value="different">Different on each</option><option value="main">Main screen only</option></select><svg><use href="#i-chev"/></svg></div></div>
+      <h2 id="screensH">Screens</h2>
+      <div class="group" id="screensG">
+        <div class="row"><label class="t" for="prefer">Penguins on</label>
+          <div class="sel"><select id="prefer"></select><svg><use href="#i-chev"/></svg></div></div>
+        <div class="row"><label class="t" for="layout">Snow on</label>
+          <div class="sel"><select id="layout"><option value="span">All screens</option><option value="main">The penguins' screen only</option></select><svg><use href="#i-chev"/></svg></div></div>
         <div class="row"><label class="t" for="perMonitor"><span>Snow on screens I'm not using</span><small>Each screen goes idle on its own</small></label>
           <div class="sw"><input type="checkbox" role="switch" id="perMonitor"><span></span></div></div>
       </div>
@@ -223,7 +239,7 @@
           <div class="sw"><input type="checkbox" role="switch" id="skipBusy"><span></span></div></div>
         <div class="row"><label class="t" for="autostart">Start with Windows</label>
           <div class="sw"><input type="checkbox" role="switch" id="autostart"><span></span></div></div>
-        <div class="row" id="updRow"><label class="t" for="autoUpdate">Automatic updates</label>
+        <div class="row" id="updRow"><label class="t" for="autoUpdate">Check for updates automatically</label>
           <div class="sw"><input type="checkbox" role="switch" id="autoUpdate"><span></span></div></div>
       </div>
     </section>
@@ -239,7 +255,7 @@
 <script>
 'use strict';
 const INIT = window.__INIT || { settings: {}, version: 'dev', screens: 1 };
-const D = { idleMin: 5, buildMin: 3, intensity: 'steady', look: 'live', layout: 'span',
+const D = { idleMin: 5, buildMin: 3, intensity: 'steady', look: 'live', layout: 'span', preferScreen: 0,
   scenes: { tree: true, parade: true, ramp: true, ice: true }, dim: 22, startle: true, skipBusy: true, autostart: false, enabled: true, perMonitor: false, autoUpdate: true };
 const S = Object.assign({}, D, INIT.settings || {});
 S.scenes = Object.assign({}, D.scenes, (INIT.settings || {}).scenes || {});
@@ -297,6 +313,17 @@ for (const id of ['startle', 'skipBusy', 'autostart', 'enabled', 'perMonitor', '
   const el = $(id); el.checked = !!S[id];
   el.addEventListener('change', () => { S[id] = el.checked; changed(false); });
 }
+// which screen the penguins perform on (listed from the screens this PC has)
+{
+  const names = INIT.screenNames || ['Main screen'];
+  const el = $('prefer');
+  el.innerHTML = names.map((n, i) => `<option value="${i}">${n}</option>`).join('') + '<option value="-1">Any screen</option>';
+  if (S.preferScreen >= names.length) S.preferScreen = 0;
+  el.value = String(S.preferScreen);
+  el.addEventListener('change', () => { S.preferScreen = +el.value; changed(false); });
+}
+if (S.layout !== 'main') S.layout = 'span';
+if ((INIT.screens || 1) < 2) { $('screensH').hidden = true; $('screensG').hidden = true; } // one screen: nothing to choose
 for (const id of ['look', 'layout']) {
   const el = $(id); el.value = S[id];
   el.addEventListener('change', () => { S[id] = el.value; changed(true); });
@@ -373,6 +400,20 @@ function wakeControls() {
   if (document.body.classList.contains('full')) stillT = setTimeout(() => { if (!document.querySelector('.over:hover')) document.body.classList.add('still'); }, 2500);
 }
 $('pvFull').addEventListener('click', () => setFull(!document.body.classList.contains('full')));
+// timeline: the preview reports where it is; dragging and letting go jumps there
+const fmtT = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+let tlDrag = false, tlNow = 0;
+const tlBar = $('tlBar');
+const paintTl = (t, max) => { tlBar.max = String(Math.max(1, max)); tlBar.value = String(t); tlBar.style.setProperty('--tp', (100 * t / Math.max(1, max)) + '%'); tlBar.style.setProperty('--p', (100 * t / Math.max(1, max)) + '%'); $('tlNow').textContent = fmtT(t); $('tlMax').textContent = fmtT(max); };
+addEventListener('message', (e) => {
+  const d = e.data; if (!d || typeof d.sdTime !== 'number') return;
+  tlNow = d.sdTime;
+  $('tl').classList.toggle('busy', !!d.sdSeeking);
+  if (!tlDrag) paintTl(d.sdTime, Math.max(d.sdMax, d.sdTime));
+});
+const seekTo = (t) => { try { $('pv').contentWindow.postMessage({ sdSeek: Math.max(0, t) }, '*'); } catch (err) {} };
+tlBar.addEventListener('input', () => { tlDrag = true; const t = +tlBar.value; $('tlNow').textContent = fmtT(t); tlBar.style.setProperty('--tp', (100 * t / +tlBar.max) + '%'); tlBar.style.setProperty('--p', (100 * t / +tlBar.max) + '%'); wakeControls(); });
+tlBar.addEventListener('change', () => { tlDrag = false; seekTo(+tlBar.value); });
 document.querySelector('.preview').addEventListener('dblclick', (e) => { if (!e.target.closest('.over')) setFull(!document.body.classList.contains('full')); });
 document.addEventListener('mousemove', wakeControls);
 let pvScene = '', pvLoads = 0;
@@ -394,6 +435,11 @@ loadPreview();
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { if (document.body.classList.contains('full')) setFull(false); else { save(); post('hide'); } }
   else if (e.key === ' ' && document.body.classList.contains('full')) { e.preventDefault(); speedEl.querySelector(`[data-s="${pvSpeed === 0 ? 1 : 0}"]`).click(); }
+  // full screen: arrows jump 5 seconds, comma and full stop step one frame
+  else if (document.body.classList.contains('full') && ['ArrowLeft', 'ArrowRight', ',', '.'].includes(e.key) && e.target !== tlBar) {
+    e.preventDefault(); wakeControls();
+    seekTo(tlNow + ({ ArrowLeft: -5, ArrowRight: 5, ',': -1 / 30, '.': 1 / 30 })[e.key]);
+  }
 });
 </script>
 </body>
