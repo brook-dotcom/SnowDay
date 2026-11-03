@@ -488,27 +488,48 @@
   SD.Cane = Cane;
 
   // horizontal bar held between two hands (limbo)
+  // a limbo bar between two holders' front flippers. It can be drawn in parts (u0..u1 along it),
+  // each part at its own depth, so a bar reaching from a near holder to a far one passes in front of
+  // whoever is nearer the far end and behind whoever is nearer the near end.
   class Bar extends Prop {
-    constructor(world, a, b) { super(world, 0, 20); this.a = a; this.b = b; this.follow = false; }
-    update(dt) { this.t += dt; const [a] = this.ends(); this.x = a[0]; }
-    ends() {
-      const ha = this.a.handWorld('F'), hb = this.b.handWorld('F');
-      return [ha, hb];
+    constructor(world, a, b, u0 = 0, u1 = 1) { super(world, 0, 20); this.a = a; this.b = b; this.u0 = u0; this.u1 = u1; this.follow = false; }
+    update(dt) { this.t += dt; const [a, b] = this.ends(); this.x = lerp(a[0], b[0], (this.u0 + this.u1) / 2); }
+    ends() { return [this.a.handWorld('F'), this.b.handWorld('F')]; }
+    // the point on the bar at a given depth (lane), and its shadow on the snow
+    atLane(lane) {
+      const [ha, hb] = this.ends();
+      const u = clamp((this.a.lane - lane) / ((this.a.lane - this.b.lane) || 1), 0, 1);
+      return [lerp(ha[0], hb[0], u), lerp(ha[1], hb[1], u)];
+    }
+    drawShadow(ctx) {
+      if (this.u0 > 0) return; // one shadow per bar
+      const [ha, hb] = this.ends(), w = this.world;
+      ctx.save(); ctx.globalAlpha = 0.14 * this.alpha; ctx.strokeStyle = '#1b2a44'; ctx.lineCap = 'round'; ctx.lineWidth = 7;
+      ctx.beginPath(); ctx.moveTo(ha[0], w.surfaceY(ha[0]) + this.a.lane); ctx.lineTo(hb[0], w.surfaceY(hb[0]) + this.b.lane); ctx.stroke();
+      ctx.restore();
     }
     draw(ctx) {
       const [ha, hb] = this.ends();
       const len = Math.hypot(hb[0] - ha[0], hb[1] - ha[1]);
+      const p0 = [lerp(ha[0], hb[0], this.u0), lerp(ha[1], hb[1], this.u0)];
+      const segLen = len * (this.u1 - this.u0);
       ctx.save(); ctx.globalAlpha = this.alpha;
-      ctx.translate(ha[0], ha[1]); ctx.rotate(Math.atan2(hb[1] - ha[1], hb[0] - ha[0]) + PI / 2);
-      ctx.translate(0, 0);
-      // draw as a straight cane (no hook) along -y
-      const path = new Path2D(); path.moveTo(0, 0); path.lineTo(0, -len);
-      ctx.lineCap = 'round'; ctx.strokeStyle = INK; ctx.lineWidth = 9.5; ctx.stroke(path);
+      ctx.translate(p0[0], p0[1]); ctx.rotate(Math.atan2(hb[1] - ha[1], hb[0] - ha[0]) + PI / 2);
+      // a straight cane (no hook) along -y; round ends only where the bar really ends
+      const path = new Path2D(); path.moveTo(0, 0); path.lineTo(0, -segLen);
+      ctx.lineCap = 'butt';
+      ctx.strokeStyle = INK; ctx.lineWidth = 9.5; ctx.stroke(path);
       ctx.strokeStyle = '#fffaf2'; ctx.lineWidth = 6.5; ctx.stroke(path);
-      ctx.lineCap = 'butt'; ctx.setLineDash([6, 7]); ctx.strokeStyle = '#e03143'; ctx.stroke(path); ctx.setLineDash([]);
+      ctx.setLineDash([6, 7]); ctx.lineDashOffset = this.u0 * len; ctx.strokeStyle = '#e03143'; ctx.stroke(path); ctx.setLineDash([]);
+      for (const [end, y] of [[this.u0 === 0, 0], [this.u1 === 1, -segLen]]) {
+        if (!end) continue;
+        ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(0, y, 4.75, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#fffaf2'; ctx.beginPath(); ctx.arc(0, y, 3.25, 0, TAU); ctx.fill();
+      }
       ctx.restore();
-      // a holder standing behind the bar still grips it: redraw their flipper over it
-      for (const h of [this.a, this.b]) if (h.lane < this.lane) h.drawFlipper(ctx, 'F');
+      // a holder standing behind this part of the bar still grips it: redraw their flipper over it
+      if (this.u0 === 0 && this.a.lane < this.lane) this.a.drawFlipper(ctx, 'F');
+      if (this.u1 === 1 && this.b.lane < this.lane) this.b.drawFlipper(ctx, 'F');
     }
   }
   SD.Bar = Bar;

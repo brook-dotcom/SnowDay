@@ -59,7 +59,7 @@
     // window parkour needs real windows to run along
     available() {
       const en = this.s.scenes || {};
-      const regular = ['tree', 'parade', 'ramp', 'igloo', 'fishing', 'blizzard', 'flying', 'snowman', 'reindeer'];
+      const regular = ['tree', 'parade', 'ramp', 'ice', 'igloo', 'fishing', 'blizzard', 'flying', 'snowman', 'reindeer'];
       const out = regular.filter((k) => en[k] !== false);
       const areas = this.firstHere ? [this.primaryArea()] : this.areas;
       if (en.parkour !== false && areas.some((a) => SD.parkourCourse(this.w, a))) out.push('parkour');
@@ -67,28 +67,23 @@
       return out;
     }
     pickScene() {
-      const en = this.s.scenes || {};
       const list = this.available();
-      const iceOn = en.ice !== false;
       const f = this.cfg.force;
       if (f && SD.SCENES[f]) {
         const F = SD.SCENES[f];
         const ok = (!F.dual || this.dualAreas.length) && (!F.needsLedges || this.areas.some((a) => SD.parkourCourse(this.w, a)));
         if (ok) return f;
       }
-      const roll = this.r();
       const pickIdx = this.r();
-      if (this.offset && list.length + (iceOn ? 1 : 0) > 1) {
+      if (this.offset && list.length > 1) {
         // "different scene on each screen": rotate through the list
-        const full = iceOn ? list.concat(['ice']) : list;
-        const base = Math.floor(pickIdx * full.length);
-        return full[(base + this.offset) % full.length];
+        const base = Math.floor(pickIdx * list.length);
+        return list[(base + this.offset) % list.length];
       }
-      if (iceOn && this.last !== 'ice' && (roll < (this.s.iceChance ?? 25) / 100 || list.length === 0)) return 'ice';
       // two-screen scenes come up a bit more often when they're possible
       let pool = list.filter((k) => k !== this.last && !this.recent.includes(k));
       if (!pool.length) pool = list.filter((k) => k !== this.last);
-      if (!pool.length) pool = list.length ? list : ['ice'];
+      if (!pool.length) pool = list.length ? list : ['tree'];
       const weighted = pool.flatMap((k) => (SD.SCENES[k].dual ? [k, k] : [k]));
       return weighted[Math.floor(pickIdx * weighted.length)];
     }
@@ -111,6 +106,7 @@
       const seed = (this.cfg.seed + this.count * 7919) >>> 0;
       const rng = SD.mulberry(seed);
       this.stage = new SD.Stage(this.w, this.sc, rng, area, this.s, seed);
+      this.stage.crewSize = sc.crew || 7;
       this.co = this.sc.run(sc.fn(this.stage), 'scene');
       this.phase = 'scene'; this.pt = 0;
       if (this.cfg.onScene) this.cfg.onScene(name);

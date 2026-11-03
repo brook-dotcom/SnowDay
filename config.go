@@ -8,6 +8,7 @@ import (
 	"log"
 	"path/filepath"
 	"strings"
+	"time"
 	"unsafe"
 
 	"github.com/jchv/go-webview2/pkg/edge"
@@ -78,6 +79,9 @@ func openConfig() {
 	}
 	web.Resize()
 	init := map[string]any{"settings": app.settings, "version": appVersion, "screens": len(mons), "updates": updatesEnabled()}
+	if cap, why := powerCap(); why != "" {
+		init["idleCap"] = map[string]any{"sec": int(cap / time.Second), "why": why}
+	}
 	js, _ := json.Marshal(init)
 	web.Init("window.__INIT=" + string(js) + ";")
 	web.Navigate(fileURL(filepath.Join(app.webDir, "config.html")))
@@ -98,7 +102,7 @@ func closeConfig() {
 		app.balloonDone = true
 		app.settings.Toured = true
 		_ = saveSettings(app.settings)
-		balloon("Snow Day is in your tray", "Snows after "+humanMinutes(app.settings.IdleMin)+" idle.")
+		balloon("Snow Day is in your tray", "Snows after "+humanDurNow()+" idle.")
 	}
 }
 
@@ -127,6 +131,23 @@ func onConfigMessage(msg string) {
 		p.Settings.sanitize()
 		st := p.Settings
 		previewReq = &saverOpts{Fast: true, Force: p.Scene, Settings: &st}
+		pSetTimer.Call(app.hwnd, timerPreview, 50, 0)
+	case strings.HasPrefix(msg, "studio:"):
+		var p struct {
+			Scene    string   `json:"scene"`
+			Settings Settings `json:"settings"`
+			Speed    float64  `json:"speed"`
+			Seed     uint32   `json:"seed"`
+		}
+		if err := json.Unmarshal([]byte(msg[7:]), &p); err != nil {
+			return
+		}
+		p.Settings.sanitize()
+		st := p.Settings
+		if p.Speed <= 0 {
+			p.Speed = 1
+		}
+		previewReq = &saverOpts{Fast: true, Force: p.Scene, Settings: &st, Studio: true, SkipBuild: p.Scene != "", Speed: p.Speed, Seed: p.Seed}
 		pSetTimer.Call(app.hwnd, timerPreview, 50, 0)
 	case msg == "hide":
 		pPostMessageW.Call(app.hwnd, WM_HIDECONFIG, 0, 0)

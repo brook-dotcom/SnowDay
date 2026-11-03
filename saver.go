@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -50,9 +51,13 @@ type saverWin struct {
 }
 
 type saverOpts struct {
-	Fast     bool
-	Force    string
-	Settings *Settings
+	Fast      bool
+	Force     string
+	Settings  *Settings
+	Studio    bool    // full-screen preview: plays on, with pause and speed controls, until closed
+	SkipBuild bool    // start with the snow already down
+	Speed     float64 // studio: starting speed
+	Seed      uint32  // 0 = pick one
 }
 
 var saver struct {
@@ -281,12 +286,15 @@ func saverConfig(s Settings, o saverOpts, bgURL string, screens []screenCfg, me 
 		"kind": "saver", "look": s.Look, "bg": bgURL, "screens": screens, "me": me,
 		"layout": layout, "seed": seed, "start": start, "fast": o.Fast, "force": nil,
 		"settings": map[string]any{
-			"buildMin": s.BuildMin, "intensity": s.Intensity, "crew": s.Crew, "iceChance": s.IceChance,
+			"buildMin": s.BuildMin, "intensity": s.Intensity,
 			"scenes": s.Scenes, "dim": s.Dim, "startle": s.Startle,
 		},
 	}
 	if o.Force != "" {
 		cfg["force"] = o.Force
+	}
+	if o.Studio {
+		cfg["studio"], cfg["skipBuild"], cfg["speed"] = true, o.SkipBuild, o.Speed
 	}
 	return cfg
 }
@@ -398,6 +406,9 @@ func startSaver(o saverOpts) {
 	resetSaverState(o)
 	saver.merged = true
 	seed := uint32(time.Now().UnixNano()&0x7fffffff) | 1
+	if o.Seed != 0 {
+		seed = o.Seed
+	}
 	start := time.Now().Add(1500 * time.Millisecond).UnixMilli()
 	for i, m := range use {
 		if !saver.running {
@@ -416,6 +427,7 @@ func startSaver(o saverOpts) {
 	saver.baseTick = lastInputTick()
 	saver.baseCursor = cursorPos()
 	pSetTimer.Call(app.hwnd, timerSaver, 100, 0)
+	holdAwake()
 	log.Printf("saver started on %d screen(s), look=%s layout=%s", len(use), s.Look, s.Layout)
 }
 
@@ -503,13 +515,15 @@ func monitorTick() {
 		return // the classic all-screens saver is up
 	}
 	s := app.settings
-	if !s.Enabled || app.paused || now.Before(app.snoozeUntil) || app.busy || !inputDesktopIsDefault() {
+	if app.busy || blockedReason() != "" {
 		return
 	}
 	limit := time.Duration(s.IdleMin * float64(time.Minute))
+	after, _ := startAfter()
+	allIdle := time.Duration(idleMillis())*time.Millisecond >= after // nobody's here: beat the screen-off
 	var due []monitor
 	for _, m := range mons {
-		if winOn(m) != nil || now.Sub(act.last[monKey(m)]) < limit {
+		if winOn(m) != nil || (!allIdle && now.Sub(act.last[monKey(m)]) < limit) {
 			continue
 		}
 		if s.SkipBusy && screenBusy(mons, m) {
@@ -542,17 +556,16 @@ func screenBusy(mons []monitor, m monitor) bool {
 	if displayHeldAwake() {
 		return true // a video somewhere: can't tell which screen it's on, so hold off
 	}
+	var st int32
+	if r, _, _ := pSHQueryUserNotificationState.Call(uintptr(unsafe.Pointer(&st))); r == 0 && (st == 3 || st == 4) {
+		return true // full-screen game or presentation mode
+	}
 	fg, _, _ := pGetForegroundWindow.Call()
 	if fg == 0 {
 		return false
 	}
-	var r RECT
-	pGetWindowRect.Call(fg, uintptr(unsafe.Pointer(&r)))
-	onIt := monitorOfWindow(mons, fg) >= 0 && monKey(mons[monitorOfWindow(mons, fg)]) == monKey(m)
-	if !onIt {
-		return false
-	}
-	return r.Left <= m.R.Left && r.Top <= m.R.Top && r.Right >= m.R.Right && r.Bottom >= m.R.Bottom
+	i := monitorOfWindow(mons, fg)
+	return i >= 0 && monKey(mons[i]) == monKey(m) && isFullscreen(fg, m)
 }
 
 func startMonitorSaver(m monitor) {
@@ -568,6 +581,7 @@ func startMonitorSaver(m monitor) {
 		saver.baseTick = lastInputTick()
 		saver.baseCursor = cursorPos()
 		pSetTimer.Call(app.hwnd, timerSaver, 100, 0)
+		holdAwake()
 	}
 	screens := buildScreens([]monitor{m})
 	seed := uint32(time.Now().UnixNano()&0x7fffffff) | 1
@@ -613,6 +627,7 @@ func closeWin(sw *saverWin) {
 	if len(saver.wins) == 0 {
 		saver.running = false
 		pKillTimer.Call(app.hwnd, timerSaver)
+		releaseAwake()
 		log.Printf("all screens clear")
 	}
 }
@@ -713,6 +728,12 @@ func saverTick() {
 	if saver.perMon && !saver.merged {
 		perMonSaverTick()
 		return
+	}
+	if saver.opts.Studio {
+		if !inputDesktopIsDefault() {
+			stopSaver()
+		}
+		return // the mouse and keyboard drive the controls instead
 	}
 	since := time.Since(saver.started)
 	if !saver.armed {
@@ -836,6 +857,25 @@ func beginWake() {
 }
 
 func onSaverMessage(sw *saverWin, msg string) {
+	if saver.opts.Studio {
+		switch {
+		case strings.HasPrefix(msg, "speed:"):
+			if sp, err := strconv.ParseFloat(msg[6:], 64); err == nil && sp >= 0 && sp <= 64 {
+				// every screen changes speed at the same moment, so they stay in step
+				at := time.Now().Add(150 * time.Millisecond).UnixMilli()
+				for _, w := range saver.wins {
+					if w.web != nil && w.web.Ready() {
+						w.web.Eval(fmt.Sprintf("window.SD && SD.setSpeedAt && SD.setSpeedAt(%d, %g)", at, sp))
+					}
+				}
+			}
+		case msg == "close":
+			pPostMessageW.Call(app.hwnd, WM_STOPSAVER, 0, 0)
+		case strings.HasPrefix(msg, "scene:"):
+			log.Printf("full-screen preview: %s", msg)
+		}
+		return
+	}
 	separate := saver.perMon && !saver.merged
 	switch {
 	case msg == "move":
@@ -867,6 +907,7 @@ func onSaverMessage(sw *saverWin, msg string) {
 	case msg == "storm":
 		onStorm(sw)
 	case msg == "stormpeak":
+		onFirstShowDone()
 		onStormPeak(sw)
 	case strings.HasPrefix(msg, "scene:"):
 		sw.scene = strings.TrimPrefix(msg, "scene:")
@@ -887,6 +928,7 @@ func stopSaver() {
 	saver.running = false
 	pKillTimer.Call(app.hwnd, timerSaver)
 	pKillTimer.Call(app.hwnd, timerMerge)
+	releaseAwake()
 	wins := saver.wins
 	saver.wins = nil
 	for _, w := range wins {

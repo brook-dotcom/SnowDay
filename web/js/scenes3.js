@@ -398,7 +398,7 @@
   }
 
   Object.assign(SD.SCENES, {
-    snowman: { name: 'Giant Snowman', fn: sceneSnowman },
-    reindeer: { name: 'First Reindeer', fn: sceneReindeer },
+    snowman: { name: 'Giant Snowman', fn: sceneSnowman, crew: 7 },
+    reindeer: { name: 'First Reindeer', fn: sceneReindeer, crew: 7 },
   });
 })();

@@ -11,7 +11,7 @@
       this.offL = -90; this.offR = world.W + 90;
       this.D = world.flatDepth;
       this.dt = 1 / 60;
-      this.crewSize = clamp(settings.crew | 0, 5, 8);
+      this.crewSize = 7; // each scene sets its own (SD.SCENES[k].crew)
       this.cast = [];
       this.pals = rng.shuffle ? rng.shuffle(SD.PALETTES.slice()) : shuffle(rng, SD.PALETTES.slice());
       this.nextId = (rng() * 100) | 0;

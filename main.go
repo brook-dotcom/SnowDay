@@ -26,7 +26,7 @@ var webFS embed.FS
 var iconFS embed.FS
 
 // appVersion is the release version (CI sets it from the git tag with -ldflags "-X main.appVersion=...")
-var appVersion = "1.3.0"
+var appVersion = "1.3.1"
 
 // buildID is stamped at build time (-ldflags "-X main.buildID=...") so a newer exe can replace a running older one.
 var buildID = "dev"
@@ -128,6 +128,7 @@ func main() {
 	tm, _, _ := pRegisterWindowMessageW.Call(uintptr(unsafe.Pointer(u16("TaskbarCreated"))))
 	app.taskbarMsg = uint32(tm)
 	addTrayIcon()
+	registerPowerNotifications()
 	pSetTimer.Call(app.hwnd, timerIdle, 1000, 0)
 	pSetTimer.Call(app.hwnd, timerMon, 250, 0)
 	if updated {
@@ -247,17 +248,10 @@ func trayTip() string {
 	if time.Now().Before(app.snoozeUntil) {
 		return "Snow Day — snoozing until " + app.snoozeUntil.Format("15:04")
 	}
-	return fmt.Sprintf("Snow Day — snows after %s idle", humanMinutes(app.settings.IdleMin))
-}
-
-func humanMinutes(m float64) string {
-	if m < 1 {
-		return fmt.Sprintf("%.0f sec", m*60)
+	if !app.settings.Enabled {
+		return "Snow Day — off"
 	}
-	if m == 1 {
-		return "1 min"
-	}
-	return fmt.Sprintf("%.0f min", m)
+	return powerStatus(power.lastReason)
 }
 
 func balloon(title, text string) {
@@ -386,8 +380,13 @@ func trayProc(hwnd, msg, wp, lp uintptr) uintptr {
 			doMerge()
 		case timerUpdate:
 			updateTick()
+		case timerPower:
+			screenOffNow()
 		}
 		return 0
+	case WM_POWERBROADCAST:
+		onPowerBroadcast(wp, lp)
+		return 1
 	case WM_DESTROY:
 		pPostQuitMessage.Call(0)
 		return 0
@@ -401,41 +400,30 @@ func trayProc(hwnd, msg, wp, lp uintptr) uintptr {
 
 // ---------- idle watching ----------
 func checkIdle() {
+	powerTick()
 	if saver.running || app.busy || perMonitorActive() {
 		return
 	}
-	s := app.settings
-	if !s.Enabled || app.paused || time.Now().Before(app.snoozeUntil) {
+	after, _ := startAfter()
+	if time.Duration(idleMillis())*time.Millisecond < after {
+		setStatus("")
 		return
 	}
-	if float64(idleMillis()) < s.IdleMin*60000 {
-		return
+	reason := blockedReason()
+	if reason == "" && app.settings.SkipBusy {
+		reason = busyReason()
 	}
-	if !inputDesktopIsDefault() {
-		return
+	setStatus(reason)
+	if reason == "" {
+		startSaver(saverOpts{})
 	}
-	if s.SkipBusy && (fullscreenAppRunning() || displayHeldAwake()) {
-		return
-	}
-	startSaver(saverOpts{})
-}
-
-// a full-screen game, a presentation or "do not disturb" style states
-func fullscreenAppRunning() bool {
-	var st int32
-	r, _, _ := pSHQueryUserNotificationState.Call(uintptr(unsafe.Pointer(&st)))
-	if r != 0 {
-		return false
-	}
-	switch st {
-	case 1, 2, 3, 4: // not present, busy, D3D full screen, presentation mode
-		return true
-	}
-	return false
 }
 
 // a video player (or anything) asking Windows to keep the display on
 func displayHeldAwake() bool {
+	if power.holding {
+		return power.heldBefore // our own request would hide anyone else's
+	}
 	if pCallNtPowerInformation.Find() != nil {
 		return false
 	}

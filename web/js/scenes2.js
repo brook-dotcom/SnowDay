@@ -1115,13 +1115,13 @@
   }
 
   Object.assign(SD.SCENES, {
-    igloo: { name: 'Igloo Contest', fn: sceneIgloo },
+    igloo: { name: 'Igloo Contest', fn: sceneIgloo, crew: 7 },
     fishing: { name: 'Ice Fishing', fn: sceneFishing },
-    blizzard: { name: 'Blizzard', fn: sceneBlizzard },
-    flying: { name: 'Flying Lessons', fn: sceneFlying },
-    parkour: { name: 'Window Parkour', fn: sceneParkour, needsLedges: true },
-    snowball: { name: 'Snowball Fight', fn: sceneSnowball, dual: true },
-    zipline: { name: 'Zipline', fn: sceneZipline, dual: true },
-    tug: { name: 'Tug-of-War', fn: sceneTug, dual: true },
+    blizzard: { name: 'Blizzard', fn: sceneBlizzard, crew: 7 },
+    flying: { name: 'Flying Lessons', fn: sceneFlying, crew: 6 },
+    parkour: { name: 'Window Parkour', fn: sceneParkour, crew: 5, needsLedges: true },
+    snowball: { name: 'Snowball Fight', fn: sceneSnowball, crew: 8, dual: true },
+    zipline: { name: 'Zipline', fn: sceneZipline, crew: 6, dual: true },
+    tug: { name: 'Tug-of-War', fn: sceneTug, crew: 8, dual: true },
   });
 })();

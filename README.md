@@ -18,6 +18,9 @@ in the tray menu.
 
 Needs Windows 10 or 11 (uses the built-in WebView2).
 
+On laptops, if Windows turns the screen off, sleeps or locks sooner than your idle time, the snow starts just
+before that. Hover over the tray icon to see when it will start, or what it's waiting for.
+
 ## The crew
 
 Captain (the leader), Chubby, Pip (a young emperor), Rocco (a rockhopper), Specs (the brainy one), Holly and the
@@ -28,6 +31,9 @@ beanie penguins.
 Deck the Tree, Candy Parade, The Big Ramp, Ice Day, Igloo Contest, Ice Fishing, Blizzard, Flying Lessons,
 Giant Snowman, First Reindeer, Parkour (runs along your open windows), and with two screens side by side:
 Snowball Fight, Zipline, Tug-of-War.
+
+In Settings, the live preview has pause and speed controls and a full-screen button; **Play as screensaver**
+runs it exactly as it plays when you step away.
 
 ## Privacy
 

@@ -16,7 +16,7 @@
       settings: {},
     };
     cfg = Object.assign(d, cfg);
-    cfg.settings = Object.assign({ buildMin: 3, intensity: 'steady', crew: 6, iceChance: 25, scenes: { tree: true, parade: true, ramp: true, ice: true }, dim: 22, startle: true }, cfg.settings || {});
+    cfg.settings = Object.assign({ buildMin: 3, intensity: 'steady', scenes: { tree: true, parade: true, ramp: true, ice: true }, dim: 22, startle: true }, cfg.settings || {});
     return cfg;
   }
 
@@ -125,6 +125,12 @@
     let steps = 0;
     let speed = cfg.speed ?? 1; // preview only: 0 = paused
     let simClock = 0, lastNow = Date.now();
+    // the screensaver runs on the wall clock (so every screen shows the same moment). In the
+    // full-screen preview the speed can change: each change starts a new segment at an agreed time.
+    let segWall = t0, segSim = 0, segSpeed = cfg.kind === 'saver' && cfg.studio ? (cfg.speed ?? 1) : 1, pendingSpeed = null;
+    const simAt = (now) => segSim + (Math.max(0, now - segWall) / 1000) * segSpeed;
+    SD.setSpeedAt = (at, sp) => { pendingSpeed = { at, sp }; if (SD.onSpeed) SD.onSpeed(sp); };
+    SD.speedNow = () => (pendingSpeed ? pendingSpeed.sp : segSpeed);
     addEventListener('message', (e) => { if (live() && e.data && typeof e.data.sdSpeed === 'number' && cfg.kind !== 'saver') speed = e.data.sdSpeed; });
     function simStep() {
       director.step(DT);
@@ -137,8 +143,16 @@
     }
     SD.view = () => ({ scale: scale / (window.devicePixelRatio || 1), offY: offY / (window.devicePixelRatio || 1), x0: view.x0 });
     SD.jump = (sec) => { const n = Math.round(sec / DT); for (let i = 0; i < n; i++) simStep(); render(); };
-    SD.wake = () => { director.wake(); document.body.style.cursor = 'default'; setTimeout(() => { if (live()) post('done'); }, 1900); };
+    SD.wake = () => { const o = document.getElementById('sdOut'); if (o) { o.style.transition = 'opacity .3s'; o.style.opacity = '0'; } director.wake(); document.body.style.cursor = 'default'; setTimeout(() => { if (live()) post('done'); }, 1900); };
     SD.fadeWhite = (sec) => director.fadeWhite(sec);
+    // lights out before the screen switches off
+    SD.fadeOut = (sec) => {
+      let d = document.getElementById('sdOut');
+      if (!d) { d = document.createElement('div'); d.id = 'sdOut'; document.body.appendChild(d); }
+      d.style.cssText = `position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;z-index:99;transition:opacity ${sec}s ease-in`;
+      d.getBoundingClientRect();
+      d.style.opacity = '1';
+    };
 
     // ---------- render ----------
     let rcv = null, rctx = null;
@@ -252,7 +266,11 @@
     function frame() {
       if (!live()) return;
       let target;
-      if (cfg.kind === 'saver') target = Math.floor((Date.now() - t0) / 1000 / DT); // wall clock keeps screens in sync
+      if (cfg.kind === 'saver') {
+        const now = Date.now();
+        if (pendingSpeed && now >= pendingSpeed.at) { segSim = simAt(pendingSpeed.at); segWall = pendingSpeed.at; segSpeed = pendingSpeed.sp; pendingSpeed = null; }
+        target = Math.floor(simAt(now) / DT); // wall clock keeps screens in sync
+      }
       else {
         const now = Date.now();
         simClock += Math.min(0.25, (now - lastNow) / 1000) * speed;
@@ -270,7 +288,8 @@
     requestAnimationFrame(frame);
 
     // ---------- input ----------
-    if (cfg.kind === 'saver') {
+    if (cfg.kind === 'saver' && cfg.studio) studioControls(cfg, director, live);
+    else if (cfg.kind === 'saver') {
       let mx = null, my = null, armed = false;
       setTimeout(() => { armed = true; }, 900);
       let woke = false;
@@ -289,6 +308,58 @@
       addEventListener('wheel', () => doWake('click'));
       addEventListener('contextmenu', (e) => e.preventDefault());
     }
+  }
+
+  // ---------- full-screen preview controls (on the main screen) ----------
+  const PAUSE = '<svg viewBox="0 0 12 12"><rect x="2.5" y="2" width="2.5" height="8" rx=".5"/><rect x="7" y="2" width="2.5" height="8" rx=".5"/></svg>';
+  const CLOSE = '<svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3 3 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+  function studioControls(cfg, director, live) {
+    document.body.style.cursor = 'default';
+    let last = 1;
+    const setSpeed = (sp) => { if (sp > 0) last = sp; post('speed:' + sp); };
+    addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); post('close'); }
+      else if (e.key === ' ') { e.preventDefault(); setSpeed(SD.speedNow() === 0 ? last : 0); }
+    });
+    addEventListener('contextmenu', (e) => e.preventDefault());
+    if (cfg.me !== 0) return;
+    const st = document.createElement('style');
+    st.textContent = `
+      #sdBar { position: fixed; left: 50%; top: 24px; transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 2px;
+        height: 40px; padding: 4px; border-radius: 8px; background: rgba(18,22,28,0.78); backdrop-filter: blur(8px); color: #eef1f5;
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 8px 24px rgba(0,0,0,0.3); font: 600 13px/1 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+        transition: opacity .3s ease; user-select: none; }
+      #sdBar.hide { opacity: 0; pointer-events: none; }
+      #sdBar .nm { padding: 0 12px 0 10px; min-width: 120px; color: #eef1f5; white-space: nowrap; }
+      #sdBar i { width: 1px; height: 20px; background: rgba(255,255,255,0.14); margin: 0 4px; }
+      #sdBar button { border: 0; background: transparent; color: rgba(238,241,245,0.82); height: 32px; min-width: 40px; padding: 0 10px; border-radius: 6px;
+        font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; display: grid; place-items: center; }
+      #sdBar button:hover { color: #fff; background: rgba(255,255,255,0.1); }
+      #sdBar button.on { background: #4aa3df; color: #0b1a26; }
+      #sdBar svg { width: 12px; height: 12px; fill: currentColor; }
+      #sdBar .x { display: flex; gap: 8px; align-items: center; padding: 0 12px; }`;
+    document.head.appendChild(st);
+    const bar = document.createElement('div');
+    bar.id = 'sdBar';
+    bar.innerHTML = `<span class="nm"></span><i></i><button data-s="0" aria-label="Pause">${PAUSE}</button><button data-s="1">1×</button><button data-s="4">4×</button><button data-s="16">16×</button><i></i><button class="x" data-close>${CLOSE}<span>Close</span></button>`;
+    document.body.appendChild(bar);
+    const nm = bar.querySelector('.nm');
+    const paint = (sp) => bar.querySelectorAll('[data-s]').forEach((b) => b.classList.toggle('on', +b.dataset.s === sp));
+    SD.onSpeed = paint; paint(SD.speedNow());
+    bar.addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.hasAttribute('data-close')) post('close'); else setSpeed(+b.dataset.s);
+    });
+    // the bar and the pointer step aside while you watch
+    let idleT = null;
+    const wake = () => { bar.classList.remove('hide'); document.body.style.cursor = 'default'; clearTimeout(idleT); idleT = setTimeout(() => { if (!bar.matches(':hover')) { bar.classList.add('hide'); document.body.style.cursor = 'none'; } }, 2500); };
+    addEventListener('mousemove', wake); wake();
+    (function label() {
+      if (!live()) return;
+      const k = director.sceneName;
+      nm.textContent = (director.phase === 'scene' || director.phase === 'linger') && k && SD.SCENES[k] ? SD.SCENES[k].name : director.phase === 'storm' ? 'Snowstorm' : 'Snowfall';
+      setTimeout(label, 400);
+    })();
   }
 
   // ---------- a pretend desktop for the settings preview ----------

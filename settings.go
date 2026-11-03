@@ -16,8 +16,6 @@ type Settings struct {
 	Intensity  string          `json:"intensity"`
 	Look       string          `json:"look"`
 	Layout     string          `json:"layout"`
-	Crew       int             `json:"crew"`
-	IceChance  int             `json:"iceChance"`
 	Scenes     map[string]bool `json:"scenes"`
 	Dim        int             `json:"dim"`
 	Startle    bool            `json:"startle"`
@@ -32,7 +30,7 @@ type Settings struct {
 func defaultSettings() Settings {
 	return Settings{
 		IdleMin: 5, BuildMin: 3, Intensity: "steady", Look: "live", Layout: "span",
-		Crew: 7, IceChance: 25, Dim: 22, Startle: true, SkipBusy: true, Enabled: true, AutoUpdate: true,
+		Dim: 22, Startle: true, SkipBusy: true, Enabled: true, AutoUpdate: true,
 		Scenes: map[string]bool{"tree": true, "parade": true, "ramp": true, "ice": true},
 	}
 }
@@ -77,15 +75,6 @@ func (s *Settings) sanitize() {
 	}
 	if s.BuildMin < 0.5 {
 		s.BuildMin = d.BuildMin
-	}
-	if s.Crew < 5 {
-		s.Crew = 5
-	}
-	if s.Crew > 8 {
-		s.Crew = 8
-	}
-	if s.IceChance < 0 || s.IceChance > 100 {
-		s.IceChance = d.IceChance
 	}
 	if s.Dim < 0 || s.Dim > 70 {
 		s.Dim = d.Dim

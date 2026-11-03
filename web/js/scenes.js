@@ -355,38 +355,45 @@
     yield 1.4;
 
     // ---- limbo! ----
+    // Staged in depth, the way you'd see it from the side: one holder near us (lower, bigger), one
+    // far away (higher, smaller), so the bar runs away from us and the dancers cross it. The bar's
+    // shadow on the snow shows which way it runs. Dancers queue at mid-depth and walk back round
+    // behind both holders, so nobody ever walks through the bar.
     const bx = S.cx - wd * S.aw * 0.2;
     const [h1, h2] = [bearers[0], bearers[1] || drummer];
+    const NEAR = 46, FAR = 3, PASS = 22; // lanes
     // up to four contestants; anyone else cheers from the far side
     const performers = band.filter((p) => p !== h1 && p !== h2).slice(0, 4);
     const fans = band.filter((p) => p !== h1 && p !== h2 && !performers.includes(p));
-    // depth, front to back: left holder, bar, limbo-er, right holder
-    // (so the bar and the limbo-er pass behind the left holder and in front of the right one)
-    h1.laneT = 26; h2.laneT = 10;
-    S.run(S.walk(h1, bx - 60, 60));
-    yield* S.walk(h2, bx + 60, 60);
+    // the near holder stands on the exit side, so a dancer's trailing head and body stay in view as
+    // they cross, and only their feet slip behind the near holder
+    h1.laneT = NEAR; h2.laneT = FAR;
+    S.run(S.walk(h1, bx + wd * 56, 60));
+    yield* S.walk(h2, bx - wd * 46, 60);
     yield* S.until(() => h1.arrived(), 10);
-    h1.face(1); h2.face(-1);
+    h1.face(-wd); h2.face(wd);
     h1.action = h2.action = 'hold';
-    yield* S.until(() => Math.abs(h1.lane - 26) < 0.5 && Math.abs(h2.lane - 10) < 0.5, 3);
-    const bar = S.add(new SD.Bar(w, h1, h2)); bar.lane = 19;
+    yield* S.until(() => Math.abs(h1.lane - NEAR) < 0.5 && Math.abs(h2.lane - FAR) < 0.5, 4);
+    const bar = S.add(new SD.Bar(w, h1, h2, 0, 0.5)); bar.lane = (NEAR + PASS) / 2;
+    const barFar = S.add(new SD.Bar(w, h1, h2, 0.5, 1)); barFar.lane = (PASS + FAR) / 2;
+    const cross = () => bar.atLane(PASS); // where a dancer passes under
     const queueX = bx - wd * 210;
-    performers.forEach((p, i) => { p.action = 'none'; p.item = null; p.laneT = 16 + (i % 2) * 1.5; p.goTo(queueX - wd * i * 36, 65); });
-    fans.forEach((p, j) => { p.action = 'none'; p.item = null; p.laneT = 6 + (j % 2) * 2; p.goTo(bx + wd * (200 + j * 44), 65); });
+    const qLane = (i) => PASS - 1 + (i % 2) * 2;
+    performers.forEach((p, i) => { p.action = 'none'; p.item = null; p.laneT = qLane(i); p.goTo(queueX - wd * i * 50, 65); });
+    fans.forEach((p, j) => { p.action = 'none'; p.item = null; p.laneT = 6 + (j % 2) * 2; p.goTo(bx + wd * (210 + j * 44), 65); });
     yield* S.until(() => performers.every((p) => p.arrived()), 30);
     fans.forEach((p) => { p.face(-wd); p.action = 'clap'; });
     performers.forEach((p) => p.face(wd));
     // the bar starts at chest height and drops each round
     const rounds = [{ arm: -1.45 }, { arm: -1.2 }, { arm: -0.95 }];
-    // highest point of a (possibly leaning) penguin, and the bar's height at x
+    // highest point of a (possibly leaning) penguin
     const TOP = [[0, -112], [-22, -100], [22, -100], [-30, -80], [30, -80], [-32, -55], [32, -55], [-30, -30], [30, -30]];
     const topY = (p) => { let m = 1e9; for (const [lx, ly] of TOP) m = Math.min(m, p.localToWorld(lx, ly)[1]); return m; };
-    const barY = (x) => { const [a, b] = bar.ends(); return lerp(a[1], b[1], clamp((x - a[0]) / ((b[0] - a[0]) || 1), 0, 1)); };
     // lean back until the top of the penguin is `gap` below the bar (negative gap: not quite low enough)
     function* leanUnder(p, gap) {
       p.loco = 'limbo'; p.limbo = 0.1; p.target = null;
       let t = 0;
-      while (topY(p) < barY(bx) + gap && p.limbo < 1.62 && t < 4) { p.limbo = Math.min(1.62, p.limbo + S.dt * 0.85); t += S.dt; yield 0; }
+      while (topY(p) < cross()[1] + gap && p.limbo < 1.62 && t < 4) { p.limbo = Math.min(1.62, p.limbo + S.dt * 0.85); t += S.dt; yield 0; }
       yield 0.25;
     }
     let alive = performers.slice();
@@ -400,11 +407,11 @@
       for (let k = 0; k < alive.length; k++) {
         const p = alive[k];
         const fail = (ri === 1 && k === 0 && alive.length > 2) || (ri === 2 && k < alive.length - 1);
-        p.laneT = 17;
-        yield* S.walk(p, bx - wd * 95, 60);
+        p.laneT = PASS;
+        yield* S.walk(p, cross()[0] - wd * 95, 60);
         yield* leanUnder(p, fail ? -10 : 5);
         if (fail) {
-          p.goTo(bx - wd * 30, 20);
+          p.goTo(cross()[0] - wd * 30, 20);
           yield* S.until(() => p.arrived(), 8);
           // bonk!
           h1.armF = R.arm - 0.25; h2.armF = R.arm + 0.2;
@@ -419,10 +426,12 @@
           yield* S.tween(0.5, (u) => { p.rot = lerp(-1.45 * p.facing, 0, SD.easeOut(u)); });
           band.forEach((q) => { if (q !== h1 && q !== h2) q.action = 'none'; });
           p.dizzy = 0.6;
-          yield* S.walk(p, bx - wd * 260 + S.r.range(-20, 20), 50);
+          // out: step forward out of the line and watch from the near side
+          p.laneT = NEAR - 8;
+          yield* S.walk(p, bx - wd * 300 + S.r.range(-20, 20), 50);
           p.face(wd); p.action = 'clap';
         } else {
-          p.goTo(bx + wd * 95, 38);
+          p.goTo(cross()[0] + wd * 95, 38);
           yield* S.until(() => p.arrived(), 15);
           const l0 = p.limbo;
           yield* S.tween(0.4, (u) => { p.limbo = lerp(l0, 0, u); });
@@ -431,9 +440,11 @@
           const slot = alive.length + next.length;
           returning.push(S.run((function* () {
             p.action = 'cheer'; yield 0.8; p.action = 'none';
-            p.laneT = 8;
-            yield* S.walk(p, queueX - wd * slot * 36, 120);
-            p.laneT = 16 + (k % 2) * 1.5; p.face(wd);
+            p.laneT = 0;
+            yield* S.walk(p, cross()[0] + wd * 150, 40); // step away and back before turning round
+            yield* S.until(() => p.lane < 1, 3);
+            yield* S.walk(p, queueX - wd * slot * 50, 120);
+            p.laneT = qLane(slot); p.face(wd);
           })()));
           next.push(p);
         }
@@ -442,12 +453,13 @@
       yield 0.5;
     }
     yield returning;
-    // champion!
+    // champion! the holders drop the bar and everyone gathers round
     const champ = alive[0];
+    h1.armF = h2.armF = null; h1.action = h2.action = 'clap';
+    bar.dead = barFar.dead = true;
+    yield 0.3;
     yield* S.walk(champ, bx, 60);
     champ.action = 'cheer'; champ.say('heart', 2);
-    h1.armF = h2.armF = null; h1.action = h2.action = 'clap';
-    bar.dead = true;
     band.forEach((q) => { if (q !== champ && q !== h1 && q !== h2) { q.action = 'clap'; q.face(q.x < bx ? 1 : -1); } });
     for (let k = 0; k < 6; k++) { w.sparkle(champ.x + S.r.range(-30, 30), champ.y - 80 + S.r.range(-20, 20), 2, '#ffd43b', 6); yield 0.25; }
     yield 1.5;
@@ -967,8 +979,8 @@
 
   SD.SCENES = {
     tree: { name: 'Deck the Tree', fn: sceneTree },
-    parade: { name: 'Candy Cane Parade', fn: sceneParade },
-    ramp: { name: 'The Big Ramp', fn: sceneRamp },
+    parade: { name: 'Candy Cane Parade', fn: sceneParade, crew: 7 },
+    ramp: { name: 'The Big Ramp', fn: sceneRamp, crew: 7 },
     ice: { name: 'Ice Day', fn: sceneIce },
   };
 })();

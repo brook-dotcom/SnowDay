@@ -55,6 +55,8 @@
   .over button:hover { color: #fff; background: rgba(255,255,255,0.08); }
   .over button.on { background: var(--accent); color: var(--on-accent); }
   .over button svg { width: 12px; height: 12px; fill: currentColor; stroke: none; }
+  .over .sep { width: 1px; height: 16px; margin: 0 3px; background: rgba(255,255,255,0.16); }
+  #pvFull svg { fill: none; }
 
   .label { color: var(--mute); font-size: 12px; font-weight: 600; line-height: 16px; margin: 14px 0 6px; }
   .scenes { display: grid; grid-template-columns: 1fr 1fr; grid-auto-flow: column; grid-template-rows: repeat(7, 28px); column-gap: 8px;
@@ -86,6 +88,7 @@
   .row .t { min-width: 0; }
   .row .t span { display: block; }
   .row .t small { display: block; color: var(--mute); font-size: 12px; line-height: 16px; }
+  .row .t small[hidden] { display: none; }
   .ctl { display: flex; align-items: center; gap: 10px; flex: none; }
 
   /* slider */
@@ -153,6 +156,7 @@
     <symbol id="i-chev" viewBox="0 0 12 12"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-check" viewBox="0 0 10 10"><path d="M1.8 5.2 4 7.4l4.2-4.8"/></symbol>
     <symbol id="i-play" viewBox="0 0 12 12"><path d="M3 1.8v8.4L10 6z"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 12 12"><path d="M1.75 4.25v-2.5h2.5M7.75 1.75h2.5v2.5M10.25 7.75v2.5h-2.5M4.25 10.25h-2.5v-2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-pause" viewBox="0 0 12 12"><rect x="2.5" y="2" width="2.5" height="8" rx=".5"/><rect x="7" y="2" width="2.5" height="8" rx=".5"/></symbol>
   </defs>
 </svg>
@@ -166,22 +170,25 @@
         <label class="over pick"><select id="pvScene" aria-label="Scene to preview"></select><svg class="chev"><use href="#i-chev"/></svg></label>
         <div class="over speed" id="speed" role="group" aria-label="Preview speed">
           <button data-s="0" aria-label="Pause"><svg><use href="#i-pause"/></svg></button><button data-s="1">1×</button><button data-s="4">4×</button><button data-s="16">16×</button>
+          <i class="sep"></i><button id="pvFull" aria-label="Full screen" title="Full screen"><svg><use href="#i-expand"/></svg></button>
         </div>
       </div>
       <div class="label" id="scenesLabel">Scenes</div>
       <div class="scenes" id="scenes" role="group" aria-labelledby="scenesLabel"></div>
-      <button class="play" id="playRandom"><svg><use href="#i-play"/></svg><span id="playText">Preview full screen</span></button>
+      <button class="play" id="playRandom"><svg><use href="#i-play"/></svg><span id="playText">Play as screensaver</span></button>
     </section>
 
     <section class="right">
       <h2>When</h2>
       <div class="group">
-        <div class="row"><label class="t" for="idleMin">Start after idle</label>
+        <div class="row"><label class="t" for="idleMin"><span>Start after idle</span><small id="idleCap" hidden></small></label>
           <div class="ctl"><input type="range" id="idleMin" min="0" max="12" step="1"><output id="idleOut"></output></div></div>
         <div class="row"><label class="t" for="buildMin">Snow builds up for</label>
           <div class="ctl"><input type="range" id="buildMin" min="0" max="6" step="1"><output id="buildOut"></output></div></div>
         <div class="row"><span class="t">Snowfall</span>
           <div class="seg" data-key="intensity" role="radiogroup" aria-label="Snowfall"><button data-v="gentle">Gentle</button><button data-v="steady">Steady</button><button data-v="heavy">Heavy</button></div></div>
+        <div class="row"><label class="t" for="startle">Startled exit</label>
+          <div class="sw"><input type="checkbox" role="switch" id="startle"><span></span></div></div>
       </div>
 
       <h2>Look</h2>
@@ -198,16 +205,6 @@
           <div class="sel"><select id="layout"><option value="span">One big scene</option><option value="mirror">Same on each</option><option value="different">Different on each</option><option value="main">Main screen only</option></select><svg><use href="#i-chev"/></svg></div></div>
         <div class="row"><label class="t" for="perMonitor"><span>Snow on screens I'm not using</span><small>Each screen goes idle on its own</small></label>
           <div class="sw"><input type="checkbox" role="switch" id="perMonitor"><span></span></div></div>
-      </div>
-
-      <h2>Crew</h2>
-      <div class="group">
-        <div class="row"><label class="t" for="crew">Penguins</label>
-          <div class="ctl"><input type="range" id="crew" min="5" max="8" step="1"><output id="crewOut"></output></div></div>
-        <div class="row"><label class="t" for="iceChance">Ice chance</label>
-          <div class="ctl"><input type="range" id="iceChance" min="0" max="100" step="5"><output id="iceOut"></output></div></div>
-        <div class="row"><label class="t" for="startle">Startled exit</label>
-          <div class="sw"><input type="checkbox" role="switch" id="startle"><span></span></div></div>
       </div>
 
       <h2>System</h2>
@@ -234,7 +231,7 @@
 <script>
 'use strict';
 const INIT = window.__INIT || { settings: {}, version: 'dev', screens: 1 };
-const D = { idleMin: 5, buildMin: 3, intensity: 'steady', look: 'live', layout: 'span', crew: 7, iceChance: 25,
+const D = { idleMin: 5, buildMin: 3, intensity: 'steady', look: 'live', layout: 'span',
   scenes: { tree: true, parade: true, ramp: true, ice: true }, dim: 22, startle: true, skipBusy: true, autostart: false, enabled: true, perMonitor: false, autoUpdate: true };
 const S = Object.assign({}, D, INIT.settings || {});
 S.scenes = Object.assign({}, D.scenes, (INIT.settings || {}).scenes || {});
@@ -248,7 +245,7 @@ const SCENES = [
   { k: 'tree', name: 'Deck the Tree' },
   { k: 'parade', name: 'Candy Parade' },
   { k: 'ramp', name: 'The Big Ramp' },
-  { k: 'ice', name: 'Ice Day', tag: 'chance', tip: 'Comes up by chance (see Ice chance)' },
+  { k: 'ice', name: 'Ice Day' },
   { k: 'igloo', name: 'Igloo Contest' },
   { k: 'fishing', name: 'Ice Fishing' },
   { k: 'blizzard', name: 'Blizzard' },
@@ -262,6 +259,7 @@ const SCENES = [
 ];
 const nearestIdx = (arr, v) => arr.reduce((bi, x, i) => (Math.abs(x - v) < Math.abs(arr[bi] - v) ? i : bi), 0);
 const fmtMin = (m) => (m < 1 ? `${Math.round(m * 60)} sec` : `${m} min`);
+const fmtSec = (t) => (t < 60 ? `${t} sec` : t % 60 ? `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}` : `${t / 60} min`);
 
 function paintRange(el) { const p = ((el.value - el.min) / (el.max - el.min)) * 100; el.style.setProperty('--p', p + '%'); }
 function bindRange(id, outId, get, set, fmt) {
@@ -274,8 +272,16 @@ function bindRange(id, outId, get, set, fmt) {
 bindRange('idleMin', 'idleOut', () => nearestIdx(IDLE, S.idleMin), (v) => (S.idleMin = IDLE[v]), (v) => fmtMin(IDLE[v]));
 bindRange('buildMin', 'buildOut', () => nearestIdx(BUILD, S.buildMin), (v) => (S.buildMin = BUILD[v]), (v) => fmtMin(BUILD[v]));
 bindRange('dim', 'dimOut', () => S.dim, (v) => (S.dim = v), (v) => v + '%');
-bindRange('crew', 'crewOut', () => S.crew, (v) => (S.crew = v), (v) => String(v));
-bindRange('iceChance', 'iceOut', () => S.iceChance, (v) => (S.iceChance = v), (v) => v + '%');
+// on this PC the screen may turn off (or sleep, or lock) before the chosen time: say when it really starts
+function paintIdleCap() {
+  const cap = INIT.idleCap, el = $('idleCap');
+  const on = cap && cap.sec < S.idleMin * 60;
+  el.hidden = !on;
+  const why = { 'the screen turns off': 'screen-off', 'the PC sleeps': 'sleep', 'the Windows screensaver starts': 'the Windows screensaver' }[cap.why] || cap.why;
+  if (on) el.textContent = `Starts at ${fmtSec(cap.sec)} here, before ${why}`;
+}
+$('idleMin').addEventListener('input', paintIdleCap);
+paintIdleCap();
 
 if (!INIT.updates) $('updRow').style.display = 'none';
 for (const id of ['startle', 'skipBusy', 'autostart', 'enabled', 'perMonitor', 'autoUpdate']) {
@@ -313,7 +319,7 @@ for (const s of SCENES) {
 
 function preview(scene) { post('preview:' + JSON.stringify({ scene: scene || '', settings: S })); }
 $('playRandom').addEventListener('click', () => preview(pvScene));
-const paintPlay = () => { const s = SCENES.find((x) => x.k === pvScene); $('playText').textContent = s ? `Preview ${s.name} full screen` : 'Preview full screen'; };
+const paintPlay = () => { const s = SCENES.find((x) => x.k === pvScene); $('playText').textContent = s ? `Play ${s.name} as screensaver` : 'Play as screensaver'; };
 $('hide').addEventListener('click', () => { save(); post('hide'); });
 $('quit').addEventListener('click', () => { save(); post('quit'); });
 
@@ -335,13 +341,15 @@ function changed(reloadPreview) {
 let pvSeed = (Date.now() % 100000) | 1;
 let pvSpeed = 1;
 const speedEl = $('speed');
-const paintSpeed = () => speedEl.querySelectorAll('button').forEach((b) => { const on = +b.dataset.s === pvSpeed; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+const paintSpeed = () => speedEl.querySelectorAll('button[data-s]').forEach((b) => { const on = +b.dataset.s === pvSpeed; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
 speedEl.addEventListener('click', (e) => {
-  const b = e.target.closest('button'); if (!b) return;
+  const b = e.target.closest('button'); if (!b || b.id === 'pvFull') return;
   pvSpeed = +b.dataset.s; paintSpeed();
   try { $('pv').contentWindow.postMessage({ sdSpeed: pvSpeed }, '*'); } catch (err) {}
 });
 paintSpeed();
+// full screen on every screen, with the same pause and speed controls; Esc or Close comes back here
+$('pvFull').addEventListener('click', () => post('studio:' + JSON.stringify({ scene: pvScene, settings: S, speed: pvSpeed || 1, seed: pvSeed })));
 let pvScene = '', pvLoads = 0;
 const pick = $('pvScene');
 pick.innerHTML = '<option value="">Random scene</option>' + SCENES.map((s) => `<option value="${s.k}">${s.name}</option>`).join('');
@@ -353,7 +361,7 @@ function loadPreview() {
   const cfg = { kind: 'preview', look, fast: true, seed: pvSeed, layout: dual ? 'span' : 'mirror', speed: pvSpeed,
     force: pvScene || null, skipBuild: !!pvScene, fitAll: dual,
     screens: dual ? [{ x: 0, y: 0, w: 1600, h: 900 }, { x: 1600, y: 0, w: 1600, h: 900 }] : undefined,
-    settings: { buildMin: S.buildMin, intensity: S.intensity, crew: S.crew, iceChance: S.iceChance, scenes: S.scenes, dim: S.dim, startle: S.startle } };
+    settings: { buildMin: S.buildMin, intensity: S.intensity, scenes: S.scenes, dim: S.dim, startle: S.startle } };
   // a new query string forces a real reload (a hash-only change would not)
   $('pv').src = 'saver.html?r=' + (++pvLoads) + '#' + encodeURIComponent(JSON.stringify(cfg));
 }

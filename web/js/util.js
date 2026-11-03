@@ -42,6 +42,8 @@ SD.fbm1 = function (x, seed = 0, oct = 3) {
 
 SD.clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 SD.lerp = (a, b, t) => a + (b - a) * t;
+// perspective: nearer the viewer (higher lane = lower on screen) reads a little bigger
+SD.depthScale = (lane) => SD.clamp(1 + (lane - 14) * 0.0042, 0.9, 1.18);
 SD.inv = (a, b, v) => SD.clamp((v - a) / (b - a), 0, 1);
 SD.smooth = (t) => { t = SD.clamp(t, 0, 1); return t * t * (3 - 2 * t); };
 SD.easeInOut = (t) => { t = SD.clamp(t, 0, 1); return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };

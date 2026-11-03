@@ -75,7 +75,7 @@
       this.kind = opt.kind && SD.KINDS[opt.kind] ? opt.kind : 'crew';
       this.K = SD.KINDS[this.kind];
       this.pal = (this.kind !== 'crew' && SD.KIND_PAL[this.kind]) || opt.pal || SD.PALETTES[this.id % SD.PALETTES.length];
-      this.size = opt.size || 0.7;
+      this.baseSize = opt.size || 0.7;
       this.tic = null;
       this.x = opt.x || 0;
       this.y = world.surfaceY(this.x);
@@ -436,6 +436,9 @@
       return [((wx - this.x) / (s * this.K.kx)) * Math.sign(this.fx || 1), (wy - (this.y + this.p.bob)) / (s * this.K.ky)];
     }
     // local hand point -> world
+    // drawn size: the penguin's own size, scaled by how near it stands
+    get size() { return this.baseSize * SD.depthScale(this.lane); }
+    set size(v) { this.baseSize = v; }
     handWorld(which = 'F') {
       const p = this.p;
       const piv = which === 'F' ? [-20, -58] : [22, -58];
