@@ -98,6 +98,11 @@
       this.haze = 0; // whiteout 0..1
       this.gale = 0; // visible blizzard streaks 0..1
       this.landings = [];
+      // fine snow: invisible flakes that fall exactly like the visible ones. Snow only builds up where
+      // they (and the visible flakes) land, so the bank grows from the snowfall, not from the ground.
+      this.fine = [];
+      this.snowDue = 0;   // snow that has fallen from the sky but not yet landed anywhere
+      this.rest = [];     // visible flakes that have landed and are melting into the surface
       this.particles = [];
       this.actors = [];
       this.props = [];
@@ -123,7 +128,7 @@
       const wt = new Float32Array(n);
       const off = r() * 100;
       for (let k = 0; k < n; k++) wt[k] = Math.max(0, fbm1(k * bin / 26 + off, 5, 3) * 1.9 + 0.15);
-      return { x0, x1, y, bin, n, h: new Float32Array(n), wt, icicles, cap: 14 + r() * 6 };
+      return { x0, x1, y, bin, n, h: new Float32Array(n), wt, icicles, cap: 14 + r() * 6, due: 0, hits: [] };
     }
     // icicles that grow from the bottom edge of windows
     _makeDrip(l, i) {
@@ -189,6 +194,8 @@
       for (let i = i0; i <= i1; i++) this.packed[i] = v;
     }
     resetSnow(depth) {
+      this.snowDue = 0;
+      for (const L of this.ledges) L.due = 0;
       for (let i = 0; i < this.n; i++) {
         this.h[i] = depth + fbm1(i * BIN / 180, this.seed + 17) * 4;
         this.packed[i] = 0;
@@ -265,54 +272,67 @@
       // move flakes
       const landings = this.landings; landings.length = 0;
       const ledges = this.ledges;
+      for (const L of ledges) L.hits.length = 0;
+      // where a falling flake meets a ledge or the ground: true if it stopped there
+      const meet = (x, py, y, visible, f) => {
+        for (let i = 0; i < ledges.length; i++) {
+          const L = ledges[i];
+          if (x < L.x0 || x > L.x1) continue;
+          const li = Math.min(L.n - 1, Math.floor((x - L.x0) / L.bin));
+          const top = L.y - L.h[li];
+          if (py <= top && y >= top) {
+            L.hits.push(li);
+            if (visible) { this._rest(f, x, i, li); return true; }
+            return false; // fine snow also carries on past windows, so the ground beneath isn't starved
+          }
+        }
+        if (y >= this.surfaceY(x) && x >= 0 && x <= W) { landings.push(x); if (visible) this._rest(f, x, -1, 0); return true; }
+        return false;
+      };
       const keep = [];
-      const over = [0, 0, 0];
-      for (let l = 0; l < 3; l++) over[l] = 0;
       for (const f of this.flakes) {
         const py = f.y;
         f.y += f.vy * dt;
         f.x += (this.wind * (0.6 + f.l * 0.35) + Math.sin(t * f.sw + f.ph) * f.amp) * dt;
         f.rot += f.vr * dt;
-        let dead = false;
-        if (f.l === 1) {
-          // ledges
-          for (let i = 0; i < ledges.length; i++) {
-            const L = ledges[i];
-            if (f.x < L.x0 || f.x > L.x1) continue;
-            const li = Math.min(L.n - 1, Math.floor((f.x - L.x0) / L.bin));
-            const top = L.y - L.h[li];
-            if (py <= top && f.y >= top) { this._ledgeLand(L, li); dead = true; break; }
-          }
-          if (!dead) {
-            const sy = this.surfaceY(f.x);
-            if (f.y >= sy && f.x >= 0 && f.x <= W) { landings.push(f.x); dead = true; }
-          }
-        }
+        let dead = f.l === 1 && meet(f.x, py, f.y, true, f);
         if (f.y > H + 20) dead = true;
         if (f.x < -200 || f.x > W + 200) dead = true;
         if (!dead) keep.push(f);
       }
       this.flakes = keep;
-
-      // accumulation
-      if (this.accum > 0) {
-        const total = this.accum * dt * W; // area to add
-        const perFlake = landings.length ? (total * 0.55) / landings.length : 0;
-        for (const x of landings) this.addSnow(x, perFlake, 5 + (x * 7.31 % 1) * 6);
-        const uniform = landings.length ? total * 0.45 : total;
-        // drift field
-        let norm = 0;
-        const tmp = this.tmp;
-        const ds = this.driftSeed;
-        const pf = SD.smooth(this.buildProg / 0.3);
-        for (let i = 0; i < this.n; i++) {
-          let w = 1 + 0.55 * fbm1(i * BIN / 340 + ds, 7, 3) + 0.25 * noise1(i * BIN / 90 + t * 0.03, 9);
-          if (pf < 1) w *= lerp(Math.max(0.03, fbm1(i * BIN / 60 + ds * 3, 13, 3) * 1.8 + 0.2), 1, pf);
-          tmp[i] = Math.max(0.02, w); norm += tmp[i];
-        }
-        const k = uniform / (norm * BIN);
-        for (let i = 0; i < this.n; i++) if (!this.packed[i]) this.h[i] += tmp[i] * k;
+      // fine snow falls with the same wind and sway as the visible middle layer
+      // (only needed while the bank is building; otherwise nothing is collecting)
+      const building = this.accum > 0 || this.snowDue > 0;
+      const fineTgt = building ? Math.round(2500 * this.areaScreens * Math.min(1, this.snowNow)) : 0;
+      let fineBudget = Math.ceil(fineTgt * dt) + 1;
+      const r = this.rng;
+      while (this.fine.length < fineTgt && fineBudget-- > 0) {
+        this.fine.push({ x: r() * (W + 300) - 150, y: -10 - r() * 120, vy: 46 * (0.75 + r() * 0.5), ph: r() * SD.TAU, sw: 0.4 + r() * 1.2, amp: 9 * (0.4 + r()) });
       }
+      const fineKeep = [];
+      for (const f of this.fine) {
+        const py = f.y;
+        f.y += f.vy * dt;
+        f.x += (this.wind * 0.95 + Math.sin(t * f.sw + f.ph) * f.amp) * dt;
+        if (meet(f.x, py, f.y, false) || f.y > H + 20 || f.x < -200 || f.x > W + 200) continue;
+        fineKeep.push(f);
+      }
+      this.fine = fineKeep.length > fineTgt * 1.5 + 50 ? fineKeep.slice(0, Math.ceil(fineTgt * 1.5) + 50) : fineKeep;
+
+      // accumulation: what falls is shared out only where flakes actually land. Snow that's still in
+      // the air waits (the first flakes take a while to reach the ground), then catches up.
+      const step = this.accum * dt * W;
+      this.snowDue += step;
+      if (landings.length && this.snowDue > 0) {
+        const release = Math.min(this.snowDue, Math.max(step, this.accum * W / 60) * 1.8);
+        const each = release / landings.length;
+        for (const x of landings) this.addSnow(x, each, 16);
+        this.snowDue -= release;
+      }
+      if (this.accum <= 0 && this.snowDue > 0 && !landings.length) this.snowDue = Math.max(0, this.snowDue - W * dt * 0.5);
+      for (const p of this.rest) p.age += dt;
+      if (this.rest.length && this.rest[0].age > 1.6) this.rest = this.rest.filter((p) => p.age <= 1.6);
 
       // flatten toward a smooth plane
       if (this.flatten > 0) {
@@ -359,6 +379,31 @@
       for (let i = 1; i < n - 1; i++) if (!P[i] && !P[i - 1] && !P[i + 1]) h[i] = tmp[i];
     }
 
+    // a visible flake that has landed: it sits on the snow for a moment and melts into it
+    _rest(f, x, ledge, li) {
+      if (this.rest.length > 400) return;
+      this.rest.push({ x, r: f.r, cr: f.cr, rot: f.rot, ledge, li, age: 0 });
+    }
+    drawResting(ctx, view) {
+      if (!this.rest.length) return;
+      const a0 = this.flakeFade ?? 1;
+      for (const p of this.rest) {
+        if (p.x < view.x0 - 10 || p.x > view.x1 + 10) continue;
+        const L = p.ledge >= 0 ? this.ledges[p.ledge] : null;
+        const top = L ? L.y - L.h[Math.min(L.n - 1, p.li)] : this.surfaceY(p.x);
+        const u = p.age / 1.6, k = 1 - u * 0.45;
+        ctx.globalAlpha = a0 * (1 - u * u) * 0.95;
+        if (p.cr) {
+          const s = p.r * 3.4 * k;
+          ctx.save(); ctx.translate(p.x, top - s * 0.3); ctx.rotate(p.rot); ctx.drawImage(SPR.crystal, -s, -s, s * 2, s * 2); ctx.restore();
+        } else {
+          const s = p.r * 1.6 * k;
+          ctx.drawImage(SPR.flake, p.x - s, top - s * 0.5, s * 2, s * 2);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
     _ledgeLand(L, li) {
       const amt = 0.18 * this.settings.ledgeRate;
       for (let d = -2; d <= 2; d++) {
@@ -371,12 +416,14 @@
         const h = L.h, n = L.n;
         // a faint uniform settling so ledges fill evenly
         let mean0 = 0; for (let i = 0; i < n; i++) mean0 += h[i]; mean0 /= n;
-        if (this.accum > 0) {
-          const rate = (this.accum / this.flatDepth) * L.cap * 0.85 * this.settings.ledgeRate;
-          // patchy clumps at first, evening out as the cap fills
-          const even = SD.smooth(mean0 / (L.cap * 0.55));
-          for (let i = 0; i < n; i++) h[i] += rate * dt * lerp(L.wt[i], 1, even) * (0.75 + 0.5 * SD.hash(i, 31 + (L.x0 | 0)));
+        // ledges fill at the same pace as the ground, but only where flakes come down on them
+        if (this.accum > 0) L.due += (this.accum / this.flatDepth) * L.cap * 0.85 * this.settings.ledgeRate * dt * n;
+        if (L.hits.length && L.due > 0) {
+          const each = L.due / L.hits.length;
+          for (const li of L.hits) for (let d = -3; d <= 3; d++) { const j = li + d; if (j >= 0 && j < n) h[j] += each * [0.05, 0.12, 0.2, 0.26, 0.2, 0.12, 0.05][d + 3]; }
+          L.due = 0;
         }
+        void mean0;
         for (let i = 0; i < n; i++) if (h[i] > L.cap) h[i] = L.cap;
         // relax and lose material over the ends -> rounded caps
         const maxd = 0.9 * L.bin;

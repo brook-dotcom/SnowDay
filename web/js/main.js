@@ -166,6 +166,7 @@
       w.drawLedges(ctx, view);
       w.drawGround(ctx, view);
       w.drawIce(ctx, view);
+      w.drawResting(ctx, view);
       // sort drawables by lane
       const items = [];
       for (const pr of w.props) if (!pr.dead) items.push(pr);
