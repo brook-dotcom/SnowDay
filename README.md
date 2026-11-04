@@ -30,7 +30,8 @@ beanie penguins.
 ## Scenes
 
 Deck the Tree, Candy Parade, The Big Ramp, Ice Day, Igloo Contest, Ice Fishing, Blizzard, Flying Lessons,
-Giant Snowman, First Reindeer, Parkour (runs along your open windows), and with two screens side by side:
+Giant Snowman, First Reindeer, Hockey Night, Gingerbread Bake-Off, Parkour (runs along your open windows),
+and with two screens side by side:
 Snowball Fight, Zipline, Tug-of-War.
 
 In Settings, the live preview has pause and speed controls and a full-screen button (Esc or double-click to

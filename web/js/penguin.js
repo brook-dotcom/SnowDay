@@ -127,7 +127,7 @@
     }
     // where carried things / bubbles / stacked penguins sit
     headTopLocal() {
-      if (this.kind === 'stranger') return { tophat: -146, bowler: -128, beret: -114 }[this.jhat] || -112;
+      if (this.kind === 'stranger') return { tophat: -146, bowler: -128, beret: -114, toque: -150 }[this.jhat] || -112;
       return (this.kind === 'crew' || this.kind === 'holly') && this.pal.style === 'muffs' ? -114 : this.K.top;
     }
     get darkFace() { return this.kind === 'rocco' || (this.kind === 'stranger' && this.look !== 'chinstrap'); }
@@ -146,6 +146,7 @@
       this.t += dt;
       // laneOff: a passing step in front of / behind someone in the way (see personalSpace)
       this.laneOff = damp(this.laneOff || 0, this.dodge || 0, 5, dt);
+      const oldLane = this.lane;
       this.lane = damp(this.lane, this.laneT + this.laneOff, 3, dt);
       if (this.dodgeT > 0) { this.dodgeT -= dt; if (this.dodgeT <= 0) this.dodge = 0; }
       const oldX = this.x, oldY = this.y;
@@ -190,11 +191,15 @@
       }
       const moved = this.x - oldX;
       this.vxEst = moved / Math.max(dt, 1e-4);
+      this.stepping = false;
       if (!this.attach && !this.air && this.loco !== 'glide' && this.loco !== 'ski' && this.loco !== 'prone' && this.loco !== 'scrabble') {
         const moving = Math.abs(moved) > 0.01;
         if (this.loco === 'stand' || this.loco === 'walk' || this.loco === 'march') this.loco = moving ? (this.march ? 'march' : 'walk') : 'stand';
+        // a change of depth (towards or away from us) is stepped, not slid; only the legs know
+        const dl = Math.abs(this.lane - oldLane);
+        this.stepping = this.loco === 'stand' && dl > 4 * dt;
         const stride = this.loco === 'march' ? 15 : this.kind === 'rocco' ? 16 : this.kind === 'chubby' ? 10 : 12;
-        if (moving) this.phase += (Math.abs(moved) / stride) * PI;
+        if (moving || this.stepping) this.phase += ((Math.abs(moved) + dl * 2.5) / stride) * PI;
         else if (this.loco === 'stand') this.phase = damp(this.phase, Math.round(this.phase / PI) * PI, 8, dt);
       }
       if (this.loco === 'climb' || this.loco === 'limbo') this.phase += Math.abs(this.y - oldY + this.x - oldX) / 9 * PI;
@@ -269,7 +274,8 @@
       let eyes = 'open';
       const s = Math.sin(ph);
 
-      switch (this.loco) {
+      const gait = this.stepping ? 'walk' : this.loco;
+      switch (gait) {
         case 'stand':
           P.bob = Math.sin(t * 2.3 + this.id) * 0.6; P.sq = 1 + Math.sin(t * 2.3 + this.id) * 0.008;
           break;
@@ -328,7 +334,7 @@
       if (this.anticip) { P.crouch = Math.max(P.crouch, this.anticip * 0.9); P.lean += this.anticip * 0.35; P.aF = lerp(P.aF, 1.6, this.anticip); P.aB = lerp(P.aB, -1.6, this.anticip); P.sq *= 1 - this.anticip * 0.08; }
       // personality in the gait
       const kind = this.kind;
-      if (this.loco === 'walk') {
+      if (gait === 'walk') {
         if (kind === 'chubby') { P.roll *= 1.6; P.bob *= 1.2; P.aF += 0.25; P.aB -= 0.25; }
         else if (kind === 'pip') { P.bob *= 1.5; P.roll *= 1.2; P.aF += Math.sin(ph * 2) * 0.2; }
         else if (kind === 'captain') { P.roll *= 0.35; P.lean = -0.05; P.aF = 0.85; P.aB = 0.55; P.bob *= 0.6; }
@@ -424,6 +430,20 @@
         case 'hang': P.aF = PI - 0.12; P.aB = -(PI - 0.12); P.fFx = 4; P.fBx = -4; P.fFy = -2 + Math.sin(t * 8) * 2; P.fBy = -2 - Math.sin(t * 8) * 2; break;
         case 'cards': P.aF = PI - 0.45; P.aB = -(PI - 0.45); P.beak = 0.2; break;
         case 'cardUp': P.aF = PI - 0.3; P.aB = -0.5; P.beak = 0.15; break;
+        // the kitchen and the TV studio
+        case 'work': { const k = Math.sin(t * 9 + this.id); P.aF = -1.55 + k * 0.22; P.aB = -1.45 - k * 0.22; P.lean = 0.1; P.beak = 0.05; break; }
+        case 'tap': { const k = Math.max(0, Math.sin(t * 14)); P.aF = -1.35 - k * 0.45; P.aB = -1.2; P.lean = 0.12; break; }
+        case 'measure': P.aF = -1.62 + Math.sin(t * 1.6) * 0.04; P.aB = -1.55; P.lean = 0.14; P.beak = 0.05; break;
+        case 'pipe': { const k = Math.max(0, Math.sin(t * 5)); P.aF = -1.45 + Math.sin(t * 2.2) * 0.12; P.aB = -1.0; P.lean = 0.12; P.beak = 0.1 + k * 0.1; break; }
+        case 'roll': { const k = Math.sin(t * 5.5); P.aF = -1.45 + k * 0.2; P.aB = -1.5 + k * 0.2; P.lean = 0.16 + k * 0.06; break; }
+        case 'stir': P.aF = -1.35 + Math.sin(t * 8) * 0.3; P.aB = -1.15; P.lean = 0.08; break;
+        case 'inspect': P.lean = 0.26 + Math.sin(t * 1.3) * 0.02; P.aF = 0.55; P.aB = 0.65; P.beak = 0.08; break;
+        case 'mic': P.aF = -2.3; P.beak = Math.max(0, Math.sin(t * 9 + this.id)) * 0.6; break;
+        case 'ring': P.aF = PI - 0.5 + Math.sin(t * 22) * 0.3; P.beak = 0.6; eyes = 'happy'; break;
+        case 'shrug': P.aF = 0.85; P.aB = -0.85; P.beak = 0.2; P.roll += 0.04; P.bob -= 2; break;
+        case 'pant': P.crouch = 0.25; P.lean = 0.3; P.aF = -0.45; P.aB = -0.55; P.beak = 0.5 + Math.sin(t * 12) * 0.3; eyes = 'closed'; P.bob += Math.sin(t * 12) * 1.2; break;
+        case 'boom': P.aF = -2.45; P.aB = -2.25; P.lean = -0.04; break;
+        case 'present': P.aF = -1.25; P.aB = -1.35; P.beak = 0.3; eyes = 'happy'; break;
         case 'drill': P.crouch = 0.35; P.lean = 0.3; P.aF = -0.75; P.aB = -0.85; P.roll += Math.sin(t * 24) * 0.02; break;
       }
       if (this.armF != null) P.aF = this.armF;
@@ -824,6 +844,18 @@
         ctx.strokeStyle = INK; ctx.lineWidth = 2.2;
         ctx.fillStyle = '#4a2f1e'; ctx.beginPath(); ctx.moveTo(-26, 1); ctx.quadraticCurveTo(0, -6, 27, 1); ctx.quadraticCurveTo(0, 5, -26, 1); ctx.fill(); ctx.stroke();
         ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.ellipse(-6, -14, 5, 3, -0.4, 0, TAU); ctx.fill();
+      } else if (h === 'toque') {
+        // a chef's hat: pleated band, puffed crown
+        ctx.translate(0, -95); ctx.rotate(-0.05);
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(-16, -18); ctx.quadraticCurveTo(0, -21, 16, -18); ctx.lineTo(15, 0); ctx.quadraticCurveTo(0, 3, -15, 0); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = 'rgba(120,135,160,0.55)'; ctx.lineWidth = 1.2;
+        for (const x of [-9, -3, 3, 9]) { ctx.beginPath(); ctx.moveTo(x, -2); ctx.lineTo(x * 1.05, -17); ctx.stroke(); }
+        ctx.strokeStyle = INK; ctx.lineWidth = 2.2; ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.moveTo(-17, -16);
+        ctx.bezierCurveTo(-30, -26, -24, -48, -10, -44); ctx.bezierCurveTo(-8, -58, 10, -58, 11, -44);
+        ctx.bezierCurveTo(25, -48, 30, -26, 17, -16); ctx.quadraticCurveTo(0, -20, -17, -16); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = 'rgba(150,170,200,0.25)'; ctx.beginPath(); ctx.ellipse(8, -32, 7, 10, 0.3, 0, TAU); ctx.fill();
       } else if (h === 'beret') {
         ctx.translate(0, -99); ctx.rotate(-0.22);
         ctx.fillStyle = '#c7364a'; ctx.beginPath(); ctx.ellipse(-2, -3, 27, 9, 0, 0, TAU); ctx.fill(); ctx.stroke();
@@ -1186,7 +1218,7 @@
     const free = [];
     for (const p of actors) {
       if (!(p instanceof Penguin) || p.dead || p.hidden || p.snug || p.attach || p.inVehicle) continue;
-      if (p.loco !== 'stand' || p.target != null || p.action === 'hug' || p.limbo) continue;
+      if ((p.loco !== 'stand' && p.loco !== 'glide') || p.target != null || p.action === 'hug' || p.limbo) continue;
       if (Math.abs(p.y - p.groundY()) > 2) continue;
       free.push(p);
     }
@@ -1220,7 +1252,7 @@
         const dx = b.x - a.x;
         if (dx >= min) break;
         if (Math.abs(a.lane - b.lane) > 6) continue;
-        const step = Math.min(min - dx, 50 * dt) / 2;
+        const step = Math.min(min - dx, (a.loco === 'glide' || b.loco === 'glide' ? 140 : 50) * dt) / 2; // skaters are quicker to make room
         a.x -= step; b.x += step;
       }
     }

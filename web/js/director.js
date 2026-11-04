@@ -63,7 +63,7 @@
     // window parkour needs real windows to run along
     available() {
       const en = this.s.scenes || {};
-      const regular = ['tree', 'parade', 'ramp', 'ice', 'igloo', 'fishing', 'blizzard', 'flying', 'snowman', 'reindeer'];
+      const regular = ['tree', 'parade', 'ramp', 'ice', 'igloo', 'fishing', 'blizzard', 'flying', 'snowman', 'reindeer', 'hockey', 'bakeoff'];
       const out = regular.filter((k) => en[k] !== false);
       const areas = this.firstHere ? [this.primaryArea()] : this.areas;
       if (en.parkour !== false && areas.some((a) => SD.parkourCourse(this.w, a))) out.push('parkour');

@@ -6,7 +6,7 @@
 // break the picture:
 //   overlap  two penguins standing at much the same depth, bodies inside each other
 //   through  a penguin walking through a solid prop it isn't using (seesaw, desk, easel, igloo,
-//            the limbo bar), at that prop's depth
+//            kitchen bench, TV camera, the limbo bar), at that prop's depth
 // Hugs, huddles (p.snug), anyone carried, riding, sitting, climbing or in the air are ignored.
 // Prints each problem once (with how long it lasted) and saves a picture of each to outDir
 // (default ./depth-check) for a look before shipping. Exits 1 if anything was found.
@@ -36,9 +36,9 @@ const page = 'file://' + path.resolve(__dirname, '../web/saver.html');
       if (!(await p.evaluate((s) => !!SD.SCENES[s], scene))) { console.log(`${scene}: no such scene`); break; }
       await p.evaluate(() => window.postMessage({ sdSpeed: 0 }, '*'));
       const found = await p.evaluate(() => {
-        const SOLID = ['Seesaw', 'JudgeTable', 'Easel', 'Igloo'];
+        const SOLID = ['Seesaw', 'JudgeTable', 'Easel', 'Igloo', 'Bench', 'TVCam'];
         const free = (a) => !a.dead && !a.hidden && !a.snug && !a.attach && !a.inVehicle && !a.air && a.action !== 'hug' &&
-          (a.loco === 'stand' || a.loco === 'walk' || a.loco === 'march') && Math.abs(a.y - a.groundY()) < 3;
+          (a.loco === 'stand' || a.loco === 'walk' || a.loco === 'march' || a.loco === 'glide') && Math.abs(a.y - a.groundY()) < 3;
         const half = (a) => 30 * a.size * a.K.kx;
         const runs = new Map(), done = [], out = [];
         const d = SD.director, w = SD.world;

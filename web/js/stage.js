@@ -182,8 +182,13 @@
         list.forEach((p, i) => { p.action = 'wave'; p.face(p.x < this.cx ? 1 : -1); });
         yield 1.4;
       }
-      const cos = list.map((p) => this.run((function* (S) {
-        p.action = 'none'; p.item = null; p.item2 = null; p.attach = null; p.loco = 'stand'; p.armF = p.armB = null;
+      // nearest the edge leaves first, everyone at their own depth, so the crowd thins out instead of
+      // squeezing through itself
+      const order = list.slice().sort((a, b) => Math.abs(a.x - this.edgeNear(a.x)) - Math.abs(b.x - this.edgeNear(b.x)));
+      const cos = order.map((p, i) => this.run((function* (S) {
+        p.action = 'none'; p.item = null; p.item2 = null; p.attach = null; p.loco = 'stand'; p.armF = p.armB = null; p.snug = false;
+        p.laneT = 12 + (i % 4) * 4; // between the back props and the front of the stage
+        yield i * 0.22;
         yield* S.walk(p, S.edgeNear(p.x), sp);
         p.dead = true;
       })(this)));

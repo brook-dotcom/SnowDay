@@ -224,6 +224,11 @@
       const r = this.rng;
       this.particles.push({ k: 'breath', x, y, vx: dir * (10 + r() * 8), vy: -8 - r() * 6, s: 4, life: 1.6, age: 0 });
     }
+    // paper confetti: drifts down, flutters, tumbles
+    confetti(x, y, n = 1, spread = 60) {
+      const r = this.rng, cols = ['#e2413b', '#ffd43b', '#3c7fd8', '#69db7c', '#f783ac', '#ffffff'];
+      for (let i = 0; i < n; i++) this.particles.push({ k: 'confetti', x: x + (r() - 0.5) * spread * 2, y: y + (r() - 0.5) * 20, vx: (r() - 0.5) * 40, vy: 10 + r() * 30, s: 7 + r() * 4, life: 3.5 + r() * 1.5, age: 0, col: cols[Math.floor(r() * cols.length)], ph: r() * 6, rot: r() * 6, spin: (r() - 0.5) * 9 });
+    }
     heart(x, y) {
       this.particles.push({ k: 'heart', x, y, vx: 0, vy: -22, s: 7, life: 1.8, age: 0, ph: this.rng() * 6 });
     }
@@ -499,6 +504,10 @@
         if (p.k === 'note' || p.k === 'heart') p.x += Math.sin(p.age * 4 + (p.ph || 0)) * 6 * dt;
         if (p.k === 'drop') { p.vy += 700 * dt; if (p.y > this.surfaceY(p.x)) continue; }
         if (p.k === 'breath') { p.vx *= 1 - dt; p.s += dt * 6; }
+        if (p.k === 'confetti') {
+          p.vy = Math.min(p.vy + 140 * dt, 60); p.vx *= 1 - 1.5 * dt; p.x += Math.sin(p.age * 5 + p.ph) * 22 * dt; p.rot += p.spin * dt;
+          if (p.y > this.surfaceY(p.x) + 40) continue;
+        }
         p.x += p.vx * dt; p.y += p.vy * dt;
         out.push(p);
       }
@@ -724,6 +733,11 @@
         } else if (p.k === 'heart') {
           ctx.globalAlpha = Math.min(1, (1 - u) * 2) * Math.min(1, u * 6);
           drawHeart(ctx, p.x, p.y, p.s);
+        } else if (p.k === 'confetti') {
+          ctx.globalAlpha = Math.min(1, (1 - u) * 4);
+          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.scale(1, Math.cos(p.age * 7 + p.ph));
+          ctx.fillStyle = p.col; ctx.fillRect(-p.s / 2, -p.s * 0.3, p.s, p.s * 0.6);
+          ctx.restore();
         }
       }
       ctx.globalAlpha = 1;
