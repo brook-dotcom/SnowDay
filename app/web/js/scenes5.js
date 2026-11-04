@@ -318,6 +318,8 @@
         ctx.fillStyle = '#2b2f3a'; ctx.strokeStyle = INK; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(x, -4, 4, 0, TAU); ctx.fill(); ctx.stroke();
         ctx.strokeStyle = '#9aa3b2'; ctx.beginPath(); ctx.moveTo(x, -4); ctx.lineTo(x + Math.cos(this.wheel) * 3, -4 + Math.sin(this.wheel) * 3); ctx.stroke();
       }
+      // a plinth down to the snow between the castors, so nobody's feet show under the cupboards
+      ctx.fillStyle = '#5b4636'; ctx.fillRect(-BW / 2 + 22, -8, BW - 44, 7);
       ctx.fillStyle = '#f6ecd9'; ctx.strokeStyle = INK; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.rect(-BW / 2 + 5, -BH + 4, BW - 10, BH - 11); ctx.fill(); ctx.stroke();
       ctx.fillStyle = this.col; ctx.fillRect(-BW / 2 + 6, -BH + 5, BW - 12, 5);
