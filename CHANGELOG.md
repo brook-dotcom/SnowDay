@@ -10,6 +10,9 @@ after a version number to have installed copies update without asking.
 - Tug-of-War: the rope no longer flickers out on one screen, and nobody stands on the join between screens
 - Deck the Tree: everyone queues at the decorations box instead of crowding into each other
 - Penguins step when they move nearer or further away, instead of sliding
+- Rocco's sunglasses are now mirrored lenses in pale frames, so they don't look like red eyes
+- Blizzard: snow builds up in lumps on hats and backs instead of a smooth cap
+- Belly-slides: flippers dig in turn, snow sprays, and the penguin rocks along with each stroke
 
 ## 1.4.0
 - One crew at a time across your screens, on the screen you choose in Settings

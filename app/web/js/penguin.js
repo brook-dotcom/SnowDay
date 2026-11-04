@@ -66,7 +66,7 @@
     stranger: { back: '#23262e', hi: '#41465a', dark: '#15171d', rim: 'rgba(160,170,210,0.25)' },
   };
 
-  const POSE_KEYS = ['lean', 'roll', 'bob', 'crouch', 'aF', 'aB', 'fFx', 'fFy', 'fBx', 'fBy', 'beak', 'prone', 'sq'];
+  const POSE_KEYS = ['lean', 'roll', 'bob', 'crouch', 'aF', 'aB', 'fFx', 'fFy', 'fBx', 'fBy', 'beak', 'prone', 'sq', 'pitch'];
 
   class Penguin {
     constructor(world, opt = {}) {
@@ -268,7 +268,7 @@
     _computePose(dt) {
       const P = this.tp, t = this.t, ph = this.phase;
       // defaults
-      P.lean = 0; P.roll = 0; P.bob = 0; P.crouch = 0; P.beak = 0; P.prone = 0; P.sq = 1;
+      P.lean = 0; P.roll = 0; P.bob = 0; P.crouch = 0; P.beak = 0; P.prone = 0; P.sq = 1; P.pitch = 0;
       P.fFx = 0; P.fFy = 0; P.fBx = 0; P.fBy = 0;
       P.aF = 0.22 + Math.sin(t * 1.6 + this.id) * 0.03; P.aB = -0.22 - Math.sin(t * 1.6 + this.id) * 0.03;
       let eyes = 'open';
@@ -310,10 +310,17 @@
           P.lean = 0.16; P.crouch = 0.35; P.fFx = 3; P.fBx = -3;
           P.aF = -0.9 + Math.sin(this.cyc) * 0.75; P.aB = -1.0 + Math.sin(this.cyc) * 0.75;
           break;
-        case 'prone':
-          P.prone = 1; P.fFy = -4 + Math.sin(t * 14) * 3 * (this.kick || 0); P.fBy = -4 - Math.sin(t * 14) * 3 * (this.kick || 0);
-          P.aF = -2.6; P.aB = -2.7; P.fFx = -2; P.fBx = 2;
+        case 'prone': {
+          // tobogganing: flat on the belly, head up, flippers digging in turn, feet flicking behind
+          const sp = Math.min(1, Math.abs(this.vx || 0) / 140), st = this.t * (5.2 + sp * 1.6) + this.id;
+          const dig = Math.sin(st), dig2 = Math.sin(st + PI);
+          P.prone = 1; P.pitch = -0.1 + Math.sin(st - 0.9) * 0.07 * sp; // nose up, rocking with each stroke
+          P.aF = -0.95 + dig * 0.6; P.aB = -0.95 + dig2 * 0.6;
+          P.fFx = -3 + dig * 3; P.fBx = 3 - dig * 3;
+          P.fFy = -4 - Math.max(0, dig2) * 6 * (this.kick || 0); P.fBy = -4 - Math.max(0, dig) * 6 * (this.kick || 0);
+          P.sq = 1 + Math.cos(st) * 0.025 * sp; P.bob = Math.max(0, dig) * 1.2 * sp;
           break;
+        }
         case 'scrabble':
           P.lean = Math.sin(t * 9) * 0.25; P.roll = Math.sin(t * 13) * 0.12;
           P.fFx = Math.sin(t * 22) * 9; P.fBx = -Math.sin(t * 22) * 9; P.fFy = -Math.max(0, Math.sin(t * 22)) * 5; P.fBy = -Math.max(0, -Math.sin(t * 22)) * 5;
@@ -502,6 +509,14 @@
       ctx.beginPath();
       ctx.ellipse(this.x + (this.p.prone ? this.facing * 10 * this.size : 0), gy + 1, (this.p.prone > 0.5 ? 50 : 30) * s, 6 * s, 0, 0, TAU);
       ctx.fill();
+      if (this.p.prone > 0.5 && Math.abs(this.vx || 0) > 30) {
+        // the groove the belly cuts, and the bow-wave of snow it shoves along
+        const f = Math.sign(this.fx) || 1, L = clamp(Math.abs(this.vx) * 0.45, 20, 120) * this.size;
+        ctx.globalAlpha = 0.16 * this.alpha; ctx.fillStyle = '#35507e';
+        ctx.beginPath(); ctx.ellipse(this.x - f * (L * 0.55 + 20 * s), gy + 1, L * 0.55, 2.6 * s, 0, 0, TAU); ctx.fill();
+        ctx.globalAlpha = 0.9 * this.alpha; ctx.fillStyle = '#f4f8ff';
+        ctx.beginPath(); ctx.ellipse(this.x + f * 38 * this.size, gy - 1, 10 * s, 5 * s, 0, 0, TAU); ctx.fill();
+      }
       ctx.restore();
     }
 
@@ -526,7 +541,7 @@
       // prone rotation around belly center
       if (p.prone > 0.001) {
         ctx.translate(0, -2 * p.prone);
-        ctx.translate(0, -34); ctx.rotate(p.prone * 1.4); ctx.translate(0, 34);
+        ctx.translate(0, -34); ctx.rotate(p.prone * 1.5 + p.pitch); ctx.translate(0, 34);
       }
       const cr = p.crouch * 12;
       this._drawBody(ctx, cr);
@@ -543,7 +558,7 @@
       ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       if (this._partOnly) {
         ctx.save(); ctx.translate(0, cr);
-        if (this._partOnly === 'F') this._flipper(ctx, -20, -58, p.aF, false); else this._flipper(ctx, 22, -58, p.aB, true);
+        if (this._partOnly === 'F') this._flipper(ctx, -20, -58 + 22 * p.prone, p.aF, false); else this._flipper(ctx, 22, -58 + 22 * p.prone, p.aB, true);
         ctx.restore();
         return;
       }
@@ -554,7 +569,7 @@
       ctx.save(); ctx.translate(0, cr);
       if (this.item && this.item.at === 'back') this._drawItem(ctx, this.item, 'F');
       if (this.item2 && this.item2.at === 'back') this._drawItem(ctx, this.item2, 'B');
-      this._flipper(ctx, 22, -58, p.aB, true);
+      this._flipper(ctx, 22, -58 + 22 * p.prone, p.aB, true);
       if (pal.style === 'muffs') this._muff(ctx, 22, -80, true);
       if (pal.style === 'flaps') { ctx.save(); ctx.translate(0, -6); this._flap(ctx, 1); ctx.restore(); }
       if (this.kind === 'rocco') this._plumes(ctx, true);
@@ -630,12 +645,7 @@
       else if (K === 'stranger') this._fancyHat(ctx);
       else this._hat(ctx);
       ctx.restore();
-      if (this.snowCap > 0.05) {
-        // snow settling on top of the head during the blizzard
-        const top = (this.hatOff ? -107 : this.headTopLocal() + 6), w = 16 + this.snowCap * 10, h = 3 + this.snowCap * 9;
-        ctx.fillStyle = '#ffffff'; ctx.strokeStyle = 'rgba(110,140,190,0.6)'; ctx.lineWidth = 1.2;
-        ctx.beginPath(); ctx.moveTo(-w, top + 3); ctx.quadraticCurveTo(-w * 0.8, top - h, 0, top - h * 1.05); ctx.quadraticCurveTo(w * 0.8, top - h, w, top + 3); ctx.quadraticCurveTo(0, top + 6, -w, top + 3); ctx.fill(); ctx.stroke();
-      }
+      if (this.snowCap > 0.05) this._snowDrift(ctx);
       ctx.restore();
 
       // front foot
@@ -644,7 +654,7 @@
       // front flipper + held items
       ctx.save(); ctx.translate(0, cr);
       if (this.item && this.item.at !== 'up' && this.item.at !== 'back') this._drawItem(ctx, this.item, 'F');
-      this._flipper(ctx, -20, -58, p.aF, false);
+      this._flipper(ctx, -20, -58 + 22 * p.prone, p.aF, false);
       if (this.item && this.item.at === 'up') {
         // carried things rest on whatever is on top of the head
         ctx.translate(0, 131 + this.headTopLocal()); // shorter heads: the load sits lower, right on top
@@ -739,20 +749,25 @@
       const down = this.tic && this.tic.n === 'shades' ? (this.shadesDown ? 1 - this.tic.t / this.tic.d : this.tic.t / this.tic.d) : this.shadesDown;
       const y = lerp(-95, -67.2, SD.smooth(down));
       ctx.save(); ctx.translate(0, y); ctx.rotate(lerp(-0.12, 0, down));
-      // red frames, so the dark lenses read against his dark head
-      const RED = '#e2363f';
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = INK; ctx.lineWidth = 4.4;
-      ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(24, -1); ctx.stroke();
-      ctx.strokeStyle = RED; ctx.lineWidth = 2.4; ctx.stroke();
-      for (const [cx, w] of [[-2.5, 8.5], [16.5, 10.5]]) {
-        ctx.beginPath(); SD.rrect(ctx, cx - w / 2 - 0.4, -5.6, w + 1.2, 11, 4);
-        const lg = ctx.createLinearGradient(0, -4, 0, 5); lg.addColorStop(0, '#3a3f52'); lg.addColorStop(1, '#0d0f14');
+      // mirrored lenses in pale frames: reads as sunglasses on a dark head, never as glowing eyes
+      const FR = '#f4efe2';
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      // temple arm back over the head
+      ctx.strokeStyle = INK; ctx.lineWidth = 4.2; ctx.beginPath(); ctx.moveTo(-9, -1); ctx.lineTo(-27, -4); ctx.stroke();
+      ctx.strokeStyle = FR; ctx.lineWidth = 2; ctx.stroke();
+      // bridge
+      ctx.strokeStyle = INK; ctx.lineWidth = 4.2; ctx.beginPath(); ctx.moveTo(4, -2); ctx.quadraticCurveTo(7, -5, 9.5, -2); ctx.stroke();
+      ctx.strokeStyle = FR; ctx.lineWidth = 2; ctx.stroke();
+      for (const [cx, w, h] of [[-3, 14, 11.5], [18, 17, 12.5]]) {
+        ctx.beginPath(); SD.rrect(ctx, cx - w / 2, -h / 2 - 0.5, w, h, 4.5);
+        const lg = ctx.createLinearGradient(cx - w / 2, -h / 2, cx + w / 2, h / 2);
+        lg.addColorStop(0, '#5fe3d6'); lg.addColorStop(0.5, '#3f79d8'); lg.addColorStop(1, '#b24fd1');
         ctx.fillStyle = lg; ctx.fill();
-        ctx.strokeStyle = INK; ctx.lineWidth = 4.4; ctx.stroke();
-        ctx.strokeStyle = RED; ctx.lineWidth = 2.4; ctx.stroke();
-        ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1.2;
-        ctx.beginPath(); ctx.moveTo(cx - w * 0.25, -1.5); ctx.lineTo(cx + w * 0.05, -2.2); ctx.stroke();
+        ctx.strokeStyle = INK; ctx.lineWidth = 5; ctx.stroke();
+        ctx.strokeStyle = FR; ctx.lineWidth = 2.8; ctx.stroke();
+        // sheen
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(cx - w * 0.28, -h * 0.18); ctx.lineTo(cx - w * 0.02, -h * 0.34); ctx.stroke();
       }
       ctx.restore();
     }
@@ -938,6 +953,40 @@
       ctx.restore();
     }
 
+    // blizzard: snow gathers in lumps on the hat, the back and the flipper tops, drips over the brim, and clings in flakes
+    _snowDrift(ctx) {
+      const c = this.snowCap, id = this.id || 0;
+      const rnd = (i) => { const v = Math.sin((id + 1) * 91.7 + i * 47.3) * 43758.5; return v - Math.floor(v); };
+      const top = this.hatOff ? -107 : this.headTopLocal() + 8;
+      const lumps = [];
+      const n = 3 + Math.round(c * 4);
+      for (let i = 0; i < n; i++) {
+        const u = n === 1 ? 0 : i / (n - 1) * 2 - 1;                 // -1..1 across the crown
+        const prof = 1 - Math.abs(u) * 0.55;                         // higher in the middle
+        const r = (3 + c * 7.5) * (0.65 + 0.55 * rnd(i)) * (0.7 + 0.5 * prof);
+        lumps.push([u * (11 + c * 8) + (rnd(i + 9) - 0.5) * 4, top + 2 - r * 0.55 - c * 4 * prof, r]);
+      }
+      // sides of the pile that sag over the brim
+      if (c > 0.45) lumps.push([-(16 + c * 6), top + 4 + c * 2, 3.2 + c * 2.6], [17 + c * 6, top + 5 + c * 2, 3 + c * 2.4]);
+      // back shoulder and flipper-top drifts come later
+      if (c > 0.3) lumps.push([-27, -83 + rnd(20) * 3, 3 + (c - 0.3) * 8], [-29.5, -70, 2.4 + (c - 0.3) * 6]);
+      if (c > 0.6) lumps.push([-31, -57, 2 + (c - 0.6) * 8]);
+      ctx.save();
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = 'rgba(96,126,176,0.85)'; ctx.lineWidth = 2.6;
+      for (const [x, y, r] of lumps) { ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke(); }
+      ctx.fillStyle = '#ffffff';
+      for (const [x, y, r] of lumps) { ctx.beginPath(); ctx.arc(x, y, r + 0.2, 0, TAU); ctx.fill(); }
+      // soft shading under each lump and a few glints so it reads as packed snow
+      ctx.fillStyle = 'rgba(176,204,238,0.55)';
+      for (const [x, y, r] of lumps) { ctx.beginPath(); ctx.ellipse(x + r * 0.15, y + r * 0.55, r * 0.8, r * 0.38, 0, 0, PI); ctx.fill(); }
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      // flakes stuck to the dark back
+      const flakes = [[-24, -62], [-20, -91], [-26, -46], [-12, -100], [-15, -75], [-28, -34], [20, -99], [-22, -22]];
+      const nf = Math.round(c * flakes.length);
+      for (let i = 0; i < nf; i++) { const [x, y] = flakes[(i * 3 + id) % flakes.length]; ctx.beginPath(); ctx.arc(x + rnd(i + 30) * 2, y, 1 + rnd(i + 40) * 1.2, 0, TAU); ctx.fill(); }
+      ctx.restore();
+    }
     _flipper(ctx, px, py, a, back) {
       ctx.save();
       ctx.translate(px, py); ctx.rotate(a);

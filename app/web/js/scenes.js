@@ -295,7 +295,8 @@
 
     // ---- 9. carols ----
     const spots = [-210, -140, 140, 210, -70];
-    all.forEach((p, i) => p.goTo(cx + spots[i] + S.r.range(-10, 10), 50));
+    // everyone walks in their own lane, so paths crossing on the way never put two on the same spot
+    all.forEach((p, i) => { p.laneT = 8 + i * 4.6; p.goTo(cx + spots[i] + S.r.range(-10, 10), 50); });
     yield* S.until(() => all.every((p) => p.arrived()), 20);
     all.forEach((p, i) => { p.face(p.x < cx ? 1 : -1); p.action = 'sway'; p.laneT = 18 + (i % 3) * 2; });
     for (let k = 0; k < 28; k++) {

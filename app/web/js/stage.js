@@ -89,9 +89,15 @@
         const v0 = 250;
         p.loco = 'prone'; p.vx = dir * v0; p.friction = v0 / left; p.kick = 0.7;
         w.puff(p.x, p.y, 4, 9, 1, 0.5);
-        let k = 0;
+        let prev = 0;
         yield* this.until(() => {
-          if ((k++ % 9) === 0 && Math.abs(p.vx) > 60) w.puff(p.x - dir * 30, p.y, 1, 6, 0.6, 0.3);
+          // each flipper stroke shoves the penguin along and flicks up a spray of snow
+          const sp = Math.min(1, Math.abs(p.vx) / 140), cur = Math.sin(p.t * (5.2 + sp * 1.6) + p.id);
+          if (prev < 0.8 && cur >= 0.8 && Math.abs(p.vx) > 50) {
+            p.vx += dir * 16;
+            w.puff(p.x - dir * 16, p.y - 2, 2, 5, 1.5, 0.9);
+          }
+          prev = cur;
           return Math.abs(p.vx) < 22 || (x - p.x) * dir < 18;
         }, 6);
         p.vx = 0; p.kick = 0;
