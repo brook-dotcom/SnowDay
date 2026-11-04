@@ -14,26 +14,25 @@
   function drawGM(ctx, g = {}) {
     const col = g.col || COOKIE, edge = g.edge || COOKIE_EDGE, face = g.face !== false;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    const limb = (x0, y0, ang, len, back) => {
-      const x1 = x0 + Math.sin(ang) * len, y1 = y0 + Math.cos(ang) * len;
-      ctx.strokeStyle = edge; ctx.lineWidth = 9.4; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
-      ctx.strokeStyle = back ? SD.shade(col, -0.1) : col; ctx.lineWidth = 6.6; ctx.stroke();
-      if (face) {
-        // an icing squiggle across the cuff
-        const mx = lerp(x0, x1, 0.72), my = lerp(y0, y1, 0.72), nx = Math.cos(ang) * 2.8, ny = -Math.sin(ang) * 2.8;
-        ctx.strokeStyle = ICING; ctx.lineWidth = 1.2; ctx.beginPath();
-        ctx.moveTo(mx - nx, my - ny); ctx.lineTo(mx + (x1 - x0) * 0.05, my + (y1 - y0) * 0.05); ctx.lineTo(mx + nx, my + ny); ctx.stroke();
-      }
+    // one cookie: limbs, body and head are a single shape, outlined once around the outside
+    const limbs = [[-4, -10, g.lF ?? -0.3, 10.5], [4, -10, g.lB ?? 0.3, 10.5], [-7, -20, g.aF ?? -1.25, 9.5], [7, -20, g.aB ?? 1.25, 9.5]]
+      .map(([x0, y0, a, len]) => [x0, y0, x0 + Math.sin(a) * len, y0 + Math.cos(a) * len, a]);
+    const shape = (fill, lw) => {
+      ctx.strokeStyle = fill; ctx.fillStyle = fill; ctx.lineWidth = lw;
+      for (const [x0, y0, x1, y1] of limbs) { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
+      ctx.lineWidth = lw - 6.6;
+      ctx.beginPath(); ctx.ellipse(0, -15.5, 9.2, 10, 0, 0, TAU); ctx.fill(); if (lw > 6.6) ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, -30, 8.4, 0, TAU); ctx.fill(); if (lw > 6.6) ctx.stroke();
     };
-    limb(3.5, -12, g.lB ?? 0.32, 11, true);
-    limb(6, -22, g.aB ?? 1.05, 10, true);
-    ctx.fillStyle = col; ctx.strokeStyle = edge; ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.ellipse(0, -16.5, 9.5, 10.5, 0, 0, TAU); ctx.fill(); ctx.stroke();
-    limb(-3.5, -12, g.lF ?? -0.32, 11, false);
-    limb(-6, -22, g.aF ?? -1.05, 10, false);
-    ctx.fillStyle = col; ctx.strokeStyle = edge; ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.arc(0, -29.5, 8.6, 0, TAU); ctx.fill(); ctx.stroke();
+    shape(edge, 9.8);
+    shape(col, 6.6);
     if (!face) return;
+    // icing squiggles across the cuffs
+    ctx.strokeStyle = ICING; ctx.lineWidth = 1.2;
+    for (const [x0, y0, x1, y1, a] of limbs) {
+      const mx = lerp(x0, x1, 0.72), my = lerp(y0, y1, 0.72), nx = Math.cos(a) * 2.6, ny = -Math.sin(a) * 2.6;
+      ctx.beginPath(); ctx.moveTo(mx - nx, my - ny); ctx.lineTo(mx + (x1 - x0) * 0.06, my + (y1 - y0) * 0.06); ctx.lineTo(mx + nx, my + ny); ctx.stroke();
+    }
     ctx.fillStyle = ICING;
     if (g.wink) { ctx.strokeStyle = ICING; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(-4.6, -31); ctx.lineTo(-1.8, -31); ctx.stroke(); }
     else { ctx.beginPath(); ctx.arc(-3.2, -31, 1.5, 0, TAU); ctx.fill(); }
@@ -44,6 +43,7 @@
     ctx.fillStyle = '#e2413b'; ctx.beginPath(); ctx.arc(0, -19.5, 1.9, 0, TAU); ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#2f9e5f'; ctx.beginPath(); ctx.arc(0, -13.5, 1.9, 0, TAU); ctx.fill(); ctx.stroke();
   }
+  SD.drawGM = drawGM;
 
   class GingerMan extends SD.Prop {
     constructor(w, x, lane) {
@@ -85,10 +85,10 @@
         g = sneak ? { aF: -2.2, aB: 2.2, lF: -0.3 + k * 0.35, lB: 0.3 + k * 0.35 }
           : { aF: -1.0 + k * 0.6, aB: 1.0 + k * 0.6, lF: -0.25 + k * 0.6, lB: 0.25 + k * 0.6, oh: true };
       } else if (m === 'hop') {
-        g = { aF: -2.5, aB: 2.5, lF: -0.6, lB: 0.6, oh: true };
+        g = { aF: -2.3, aB: 2.3, lF: -0.55, lB: 0.55, oh: true };
       } else if (m === 'pose') {
         const k = Math.sin(t * 3) * 0.12;
-        g = { aF: -2.55 + k, aB: 2.55 - k, lF: -0.42, lB: 0.42, wink: (t % 2.6) < 1.2 };
+        g = { aF: -2.3 + k, aB: 2.3 - k, lF: -0.4, lB: 0.4, wink: (t % 2.6) < 1.2 };
       } else if (m === 'peek') {
         ctx.rotate(-this.facing * 0.35);
         g = { aF: -0.6, aB: 0.7, lF: -0.2, lB: 0.2 };
@@ -109,6 +109,7 @@
       this.onAir = 0; this.clock = 0; this.clockOn = false; this.show = 0;
     }
     bbox() { return [this.x - this.W / 2, this.y - this.H - 20, this.x + this.W / 2, this.y]; }
+    extent() { return [Math.min(this.xa, this.xb, this.x - this.W / 2), Math.max(this.xa, this.xb, this.x + this.W / 2)]; }
     draw(ctx) {
       if (this.show <= 0) return;
       const W = this.W, H = this.H, top = -H, bot = -4;
@@ -179,7 +180,7 @@
       ctx.fillStyle = '#fff4dc'; ctx.beginPath(); ctx.arc(0, ey, 39, 0, TAU); ctx.fill(); ctx.stroke();
       ctx.strokeStyle = 'rgba(160,110,30,0.5)'; ctx.lineWidth = 1;
       for (let k = 0; k < 24; k++) { const a = k / 24 * TAU; ctx.beginPath(); ctx.moveTo(Math.cos(a) * 41, ey + Math.sin(a) * 41); ctx.lineTo(Math.cos(a) * 45, ey + Math.sin(a) * 45); ctx.stroke(); }
-      ctx.save(); ctx.translate(0, ey + 30); ctx.scale(1.55, 1.55); drawGM(ctx, { aF: -2.2, aB: 2.2, lF: -0.38, lB: 0.38 }); ctx.restore();
+      ctx.save(); ctx.translate(0, ey + 30); ctx.scale(1.55, 1.55); drawGM(ctx, { aF: -1.95, aB: 1.95, lF: -0.36, lB: 0.36 }); ctx.restore();
       const ry = ey + 58, rw = 128;
       ctx.fillStyle = '#9e2533'; ctx.strokeStyle = INK; ctx.lineWidth = 2;
       for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(s * (rw - 10), ry - 8); ctx.lineTo(s * (rw + 22), ry - 6); ctx.lineTo(s * (rw + 12), ry + 7); ctx.lineTo(s * (rw + 22), ry + 20); ctx.lineTo(s * (rw - 10), ry + 18); ctx.closePath(); ctx.fill(); ctx.stroke(); }

@@ -101,6 +101,11 @@
       drawBackground();
     }
     let offY = 0;
+    // is any of it near this window? long props (a rope, a cable, a backdrop) report their extent
+    function inView(it, m) {
+      const [a, b] = it.extent ? it.extent() : [it.x, it.x];
+      return b >= view.x0 - m && a <= view.x1 + m;
+    }
     function worldTransform(c) { c.setTransform(scale, 0, 0, scale, -view.x0 * scale, offY); }
 
     function drawBackground() {
@@ -189,7 +194,7 @@
         worldTransform(rctx);
         SD.reflecting = true;
         for (const it of items) {
-          if (it.x < view.x0 - 200 || it.x > view.x1 + 200) continue;
+          if (!inView(it, 200)) continue;
           rctx.save();
           rctx.translate(0, 2 * it.y + 2); rctx.scale(1, -1);
           it.draw(rctx);
@@ -209,10 +214,10 @@
         ctx.restore();
         rctx.globalCompositeOperation = 'source-over';
       }
-      for (const it of items) if (it.drawShadow && it.x > view.x0 - 200 && it.x < view.x1 + 200) it.drawShadow(ctx);
+      for (const it of items) if (it.drawShadow && inView(it, 200)) it.drawShadow(ctx);
       w.drawParticles(ctx, view, false);
       for (const it of items) {
-        if (it.x < view.x0 - 400 || it.x > view.x1 + 400) continue;
+        if (!inView(it, 400)) continue;
         it.draw(ctx);
       }
       w.drawParticles(ctx, view, true);

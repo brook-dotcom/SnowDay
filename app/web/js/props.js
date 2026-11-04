@@ -537,6 +537,7 @@
 
   // ======================= ladder =======================
   class Ladder extends Prop {
+    extent() { return [Math.min(this.ax, this.bx), Math.max(this.ax, this.bx)]; }
     constructor(world, ax, ay, bx, by, lane = 4) {
       super(world, ax, lane); this.follow = false;
       this.ax = ax; this.ay = ay; this.bx = bx; this.by = by; this.show = 1; this.col = '#d39a55';

@@ -115,9 +115,33 @@
     const queue = T.baubles.slice().sort((a, b) => b.y - a.y);
     const decorators = [boxer, carriers[0], carriers[1], carriers[2], carriers[3]];
     const ladderMutex = { owner: null };
+    // one at a time at the box and on the ladder; the rest wait their turn in a line, a step apart,
+    // instead of crowding into each other
+    const boxQ = [], ladQ = [];
+    function* atBox(p) {
+      boxQ.push(p);
+      while (true) {
+        const k = boxQ.indexOf(p);
+        p.laneT = 8 + Math.min(k, 2) * 5; // each place in the line its own depth, all behind the way back to the tree
+        yield* S.walk(p, boxX - boxSide * (26 + k * 46) + (k ? 0 : S.r.range(-6, 6)), 62);
+        yield* S.until(() => Math.abs(p.lane - p.laneT) < 1.2, 1.5);
+        if (boxQ[0] === p) return;
+        yield* S.until(() => boxQ.indexOf(p) < k, 30);
+      }
+    }
+    // the next one steps up once this one has carried their things clear of the box
+    const leaveBox = (p) => S.run((function* () {
+      yield* S.until(() => Math.abs(p.x - boxX) > 70, 6);
+      const i = boxQ.indexOf(p); if (i >= 0) boxQ.splice(i, 1);
+    })());
     function* takeLadder(p) {
-      while (ladderMutex.owner && ladderMutex.owner !== p) yield 0;
-      ladderMutex.owner = p;
+      ladQ.push(p);
+      while ((ladderMutex.owner && ladderMutex.owner !== p) || ladQ[0] !== p) {
+        const k = ladQ.indexOf(p), wx = lad.L.ax + lad.side * (60 + k * 46);
+        if (Math.abs(p.x - wx) > 3) { p.goTo(wx, 60); yield 0; } else { p.target = null; yield 0; }
+      }
+      p.target = null;
+      ladQ.shift(); ladderMutex.owner = p;
     }
     function* moveLadder(p, side) {
       const L = lad.L;
@@ -131,9 +155,11 @@
       yield* S.tween(0.6, (u) => { lad.L.show = SD.backOut(u); });
     }
     function* decorateOne(p, b) {
-      yield* S.walk(p, boxX - boxSide * 26 + S.r.range(-6, 6), 62);
+      yield* atBox(p);
       p.face(boxSide); p.action = 'plant'; yield 0.45;
       p.item = SD.items.bauble(b.col, b.shape); p.action = 'hold'; yield 0.25;
+      leaveBox(p);
+      p.laneT = 26; // back to the tree along the front, past anyone waiting
       const [bx, by] = T.localToWorld(b.x, b.y);
       const reachH = S.ground(bx) - by;
       const side = b.x < 0 ? -1 : 1;
@@ -171,6 +197,7 @@
       const p = decorators[gi % 2 === 0 ? 1 : 2];
       const [x1, y1] = T.localToWorld(G.x1, G.y1), [x2, y2] = T.localToWorld(G.x2, G.y2);
       yield* S.walk(p, x1 - 10, 70);
+      p.laneT = 24; // along the front, nearer us than anyone standing about
       p.face(1); p.action = 'reach';
       const pt = G.pts;
       yield* S.tween(2.6, (u) => {
@@ -249,11 +276,13 @@
     const gifters = [carriers[2], carriers[3], boxer];
     const gcos = gifters.map((p, i) => S.run((function* () {
       yield i * 1.2;
-      yield* S.walk(p, boxX - boxSide * 24, 60);
+      yield* atBox(p);
       p.face(boxSide); p.action = 'plant'; yield 0.4;
       const [gc, rc] = giftCols[i];
       p.item = SD.items.giftFront(gc, rc); p.action = 'hold';
+      leaveBox(p);
       const gx = cx + giftSpots[i];
+      p.laneT = 18 + i * 5; // each sets theirs down at their own depth, so nobody walks through another
       yield* S.walk(p, gx - Math.sign(giftSpots[i]) * -24, 55);
       p.face(gx > p.x ? 1 : -1);
       p.action = 'plant'; yield 0.3;

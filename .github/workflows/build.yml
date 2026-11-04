@@ -1,6 +1,6 @@
 name: build
 
-# Every push to main is scanned and built. When the version in main.go has no release yet,
+# Every push to main is scanned and built. When the version in app/main.go has no release yet,
 # a release is published with SnowDay.exe and its SHA-256, which installed copies pick up.
 on:
   push:
@@ -26,9 +26,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: ver
-        name: Read version from main.go
+        name: Read version from app/main.go
         run: |
-          VER=$(sed -n 's/^var appVersion = "\(.*\)"$/\1/p' main.go)
+          VER=$(sed -n 's/^var appVersion = "\(.*\)"$/\1/p' app/main.go)
           test -n "$VER"
           echo "version=$VER" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v5
@@ -46,7 +46,7 @@ jobs:
         run: |
           go build -trimpath \
             -ldflags "-H windowsgui -s -w -X main.appVersion=${{ steps.ver.outputs.version }} -X main.buildID=${GITHUB_SHA::12} -X main.updateRepo=$GITHUB_REPOSITORY" \
-            -o SnowDay.exe .
+            -o SnowDay.exe ./app
           sha256sum SnowDay.exe > SnowDay.exe.sha256
           cat SnowDay.exe.sha256
       - uses: actions/upload-artifact@v4

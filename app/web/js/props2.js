@@ -548,6 +548,7 @@
 
   class Cable extends Prop {
     constructor(w, A, B, sag) { super(w, (A[0] + B[0]) / 2, 2); this.A = A; this.B = B; this.sag = sag; this.load = 0; this.loadU = 0.5; this.follow = false; }
+    extent() { return [Math.min(this.A[0], this.B[0]), Math.max(this.A[0], this.B[0])]; }
     point(u) {
       const [ax, ay] = this.A, [bx, by] = this.B;
       const s = this.sag * 4 * u * (1 - u) + this.load * Math.max(0, 1 - Math.abs(u - this.loadU) * 3.2);
@@ -568,7 +569,11 @@
   // ---------- rope through a line of hands (tug-of-war) ----------
   class Rope extends Prop {
     constructor(w, getPts, flagX) { super(w, 0, 30); this.getPts = getPts; this.flagX = flagX; this.cut = false; this.follow = false; }
-    update(dt) { this.t += dt; const pts = this.getPts(); if (pts.length) this.x = pts[0][0]; }
+    update(dt) {
+      this.t += dt; const pts = this.getPts();
+      if (pts.length) { this.x = pts[0][0]; this.ext = [Math.min(...pts.map((q) => q[0])), Math.max(...pts.map((q) => q[0]))]; }
+    }
+    extent() { return this.ext || [this.x, this.x]; }
     draw(ctx) {
       const pts = this.getPts();
       if (pts.length < 2) return;

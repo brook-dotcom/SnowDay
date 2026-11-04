@@ -3,10 +3,13 @@
 Each version's list becomes its release notes and is shown in the update prompt. Add "(critical)"
 after a version number to have installed copies update without asking.
 
-## 1.5.0
+## 1.5.1
 - New scene: Hockey Night. The rink gets resurfaced, the goals are pushed in, and every game ends differently
 - New scene: Gingerbread Bake-Off. The crew builds a TV set, then three very different bakers compete for the trophy
-- Penguins walk when they move nearer or further away, instead of sliding
+- Giant Snowman: you can see Pip get rolled up in the snowball, feet sticking out
+- Tug-of-War: the rope no longer flickers out on one screen, and nobody stands on the join between screens
+- Deck the Tree: everyone queues at the decorations box instead of crowding into each other
+- Penguins step when they move nearer or further away, instead of sliding
 
 ## 1.4.0
 - One crew at a time across your screens, on the screen you choose in Settings

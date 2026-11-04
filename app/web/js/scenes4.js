@@ -96,6 +96,7 @@
   // rink lines painted under the ice (flat on the ice, so they run back into the distance)
   class RinkLines extends SD.Prop {
     constructor(w, x0, x1) { super(w, (x0 + x1) / 2, 0.2); this.x0 = x0; this.x1 = x1; this.show = 0; }
+    extent() { return [this.x0, this.x1]; }
     draw(ctx) {
       if (this.show <= 0) return;
       const w = this.world, cx = (this.x0 + this.x1) / 2, sy = w.surfaceY(cx);

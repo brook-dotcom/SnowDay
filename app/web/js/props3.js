@@ -44,6 +44,20 @@
       }
       ctx.restore();
       ctx.strokeStyle = SNOW_LINE; ctx.lineWidth = 2; ctx.stroke(path);
+      // somebody's feet, sticking out of the snow and turning with the ball
+      if (this.stuck) {
+        const a = this.stuck.a + this.rot, k = this.stuck.k ?? 1;
+        ctx.save(); ctx.rotate(a); ctx.translate(r * 0.9, 0); ctx.rotate(PI / 2); ctx.scale(1.7, 1.7);
+        for (const s of [-1, 1]) {
+          const kick = Math.sin(this.t * 14 + s * 1.5) * 0.35;
+          ctx.save(); ctx.translate(s * 4.5, 0); ctx.rotate(PI + s * 0.18 + kick);
+          ctx.strokeStyle = '#151b2b'; ctx.lineWidth = 2; ctx.fillStyle = '#5d6470';
+          ctx.beginPath(); ctx.moveTo(-2.5, 0); ctx.lineTo(-2.5, 7 * k); ctx.quadraticCurveTo(-3, 11 * k, 2, 12 * k); ctx.lineTo(6, 12 * k); ctx.quadraticCurveTo(7, 9 * k, 2.5, 7.5 * k); ctx.lineTo(2.5, 0); ctx.fill(); ctx.stroke();
+          ctx.restore();
+        }
+        ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(0, 1, 9, 3.5, 0, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
       ctx.restore();
     }
   }

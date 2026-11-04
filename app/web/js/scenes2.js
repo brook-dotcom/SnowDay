@@ -1126,7 +1126,7 @@
   // =====================================================================
   function* sceneTug(S) {
     const w = S.w, r = S.r, xm = S.xm;
-    const cap = S.spawn({ x: S.offL, kind: 'captain', lane: 6 });
+    const cap = S.spawn({ x: S.offL, kind: 'captain', lane: 4 });
     const n = Math.max(4, S.crewSize - 1);
     const left = [], right = [];
     for (let i = 0; i < n; i++) {
@@ -1140,9 +1140,9 @@
       if (i >= 0) { team.splice(i, 1); team.push(anchorP); }
     }
     const pullers = [...left, ...right];
-    const mark = S.add(new SD.Mark(w, xm, 10));
+    const mark = S.add(new SD.Mark(w, xm + 14, 10)); // just off the join, so the whole flag shows
     const baseL = (k) => xm - 120 - k * 72, baseR = (k) => xm + 120 + k * 72;
-    S.run(S.walk(cap, xm - 40, 70));
+    S.run(S.walk(cap, xm - 54, 70));
     yield [...left.map((p, k) => S.run(S.walk(p, baseL(k), 80))), ...right.map((p, k) => S.run(S.walk(p, baseR(k), 80)))];
     left.forEach((p) => p.face(1)); right.forEach((p) => p.face(-1));
     yield* S.until(() => cap.arrived(), 10);
@@ -1165,6 +1165,11 @@
       while (pulling) {
         left.forEach((p, k) => { if (!p.attach && !p.air) { p.x = baseL(k) + off; p.y = p.groundY(); } });
         right.forEach((p, k) => { if (!p.attach && !p.air) { p.x = baseR(k) + off; p.y = p.groundY(); } });
+        // the referee keeps near the ribbon, behind the rope and clear of both front pullers, but never
+        // right on the join between the screens (he'd be cut in half by the bezels)
+        let rx = xm + off;
+        if (Math.abs(rx - xm) < 54) rx = xm + (off >= 0 ? 54 : -54);
+        if (Math.abs(cap.x - rx) > 6) cap.goTo(rx, 90);
         pullers.forEach((p) => { p.phase += Math.abs(off - (p._lo ?? off)) * 0.5; p._lo = off; });
         yield 0;
       }

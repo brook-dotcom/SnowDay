@@ -47,18 +47,25 @@ repository's public release list on GitHub. Settings stay on your PC in `%APPDAT
 
 ## Building
 
-Cross-compiles from any OS with Go (see `go.mod` for the version); dependencies are vendored in `third_party/`:
+```
+app/           the Windows app (Go) and, in app/web, the snow and scenes it shows
+third_party/   vendored Go dependencies
+tools/         depth check, secret scan, icon resource builder
+```
+
+Cross-compiles from any OS with Go (see `go.mod` for the version):
 
 ```
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 GOFLAGS=-mod=mod GOPROXY=off GOSUMDB=off \
-  go build -trimpath -ldflags "-H windowsgui -s -w" -o SnowDay.exe .
+  go build -trimpath -ldflags "-H windowsgui -s -w" -o SnowDay.exe ./app
 ```
 
-Every push to `main` runs `tools/secret-scan.sh` and builds the exe (`.github/workflows/build.yml`).
-To ship an update, bump `appVersion` in `main.go` and add its section to `CHANGELOG.md` (that list is the
-release notes and what the update prompt shows): the next push publishes the release.
+Work happens on `dev`. Every push to `main` runs `tools/secret-scan.sh` and builds the exe
+(`.github/workflows/build.yml`); when `appVersion` in `app/main.go` is new, that push publishes the release,
+with its `CHANGELOG.md` section as the notes the update prompt shows.
 
 Before a release, run `node tools/depth-check.js` (needs Playwright). It plays every scene on three seeds
-and flags penguins standing inside each other or walking through props, with a picture of each.
+and flags penguins standing inside each other, walking through props, or standing on the join between two
+screens, with a picture of each.
 
-The penguins, reindeer and scenes are original artwork drawn in code (`web/js/`).
+The penguins, reindeer and scenes are original artwork drawn in code (`app/web/js/`).

@@ -7,6 +7,8 @@
 //   overlap  two penguins standing at much the same depth, bodies inside each other
 //   through  a penguin walking through a solid prop it isn't using (seesaw, desk, easel, igloo,
 //            kitchen bench, TV camera, the limbo bar), at that prop's depth
+//   join     (two-screen scenes) a penguin standing still across the join between the screens,
+//            where the bezels would cut it in half
 // Hugs, huddles (p.snug), anyone carried, riding, sitting, climbing or in the air are ignored.
 // Prints each problem once (with how long it lasted) and saves a picture of each to outDir
 // (default ./depth-check) for a look before shipping. Exits 1 if anything was found.
@@ -17,7 +19,7 @@ const fs = require('fs');
 const ALL = ['tree', 'parade', 'ramp', 'ice', 'igloo', 'fishing', 'blizzard', 'flying', 'snowman', 'reindeer', 'parkour', 'snowball', 'zipline', 'tug', 'hockey', 'bakeoff'];
 const scenes = (process.argv[2] || ALL.join(',')).split(',');
 const outDir = process.argv[3] || 'depth-check';
-const page = 'file://' + path.resolve(__dirname, '../web/saver.html');
+const page = 'file://' + path.resolve(__dirname, '../app/web/saver.html');
 
 (async () => {
   fs.mkdirSync(outDir, { recursive: true });
@@ -76,6 +78,12 @@ const page = 'file://' + path.resolve(__dirname, '../web/saver.html');
               if (Math.abs(a.x - bx) < 10) seen.add(`through|${a.kind}#${a.id}|limbo bar|${a.x}|${a.y}`);
             }
           }
+          // standing on the join between two screens
+          const joins = (w.screens || []).slice(1).map((sc) => sc.x0);
+          for (const a of as) {
+            if (a.loco !== 'stand') continue;
+            for (const jx of joins) if (Math.abs(a.x - jx) < half(a) * 0.8) seen.add(`join|${a.kind}#${a.id}|screen join|${a.x}|${a.y}`);
+          }
           // continuous runs per pair: a gap of more than half a second starts a new one
           for (const k of seen) {
             const id = k.split('|').slice(0, 3).join('|'), r = runs.get(id);
@@ -85,7 +93,7 @@ const page = 'file://' + path.resolve(__dirname, '../web/saver.html');
           }
         }
         done.push(...runs.values());
-        for (const r of done) if (r.t1 - r.t0 >= (r.k.startsWith('overlap') ? 1 : 0.25)) { const [kind, a, b2, x, y] = r.k.split('|'); out.push({ kind, a, b: b2, x: +x, y: +y, t0: r.t0, t1: r.t1 }); }
+        for (const r of done) if (r.t1 - r.t0 >= (r.k.startsWith('overlap') ? 1 : r.k.startsWith('join') ? 1.5 : 0.25)) { const [kind, a, b2, x, y] = r.k.split('|'); out.push({ kind, a, b: b2, x: +x, y: +y, t0: r.t0, t1: r.t1 }); }
         return { out, started };
       });
       for (const f of found.out) {

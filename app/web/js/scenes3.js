@@ -74,21 +74,35 @@
     const mx0 = sx + dir * S.aw * 0.36;
     yield pushB.map((p, i) => S.run(S.walk(p, mx0 + dir * (40 + i * 26), 80)));
     const b2 = S.add(new SD.SnowBall(w, mx0, 8, 14));
-    // Pip runs ahead to pat the ball as it comes
-    const pipStop = mx0 - dir * 160;
+    // Pip runs ahead to cheer the ball on; by the time it reaches him it's bigger than he is
+    const pipStop = mx0 - dir * Math.abs(mx0 - sx) * 0.45;
     yield* S.walk(pip, pipStop, 80);
     pip.face(dir); pip.action = 'clap';
     pushB.forEach((p) => { p.action = 'plant'; }); yield 0.5;
-    let swallowed = false;
     const rollB = S.run(rollBall(S, b2, pushB, sx + dir * 2, 60, 36));
-    pushB.forEach((p) => { p.eyeOverride = 'closed'; }); // heads down, pushing hard
-    yield* S.until(() => Math.abs(b2.x - pip.x) < b2.r * 0.75, 30);
-    // gulp
-    pip.say('!', 0.5); pip.eyeOverride = 'wide';
-    yield 0.18;
-    pip.hidden = true; pip.attach = () => ({ x: b2.x, y: pip.groundY() });
-    b2.shake.kick(4); w.puff(b2.x, b2.y - b2.r, 4, 9);
-    swallowed = true;
+    pushB.forEach((p) => { p.eyeOverride = 'closed'; }); // heads down, pushing hard: they don't see a thing
+    yield* S.until(() => Math.abs(b2.x - pip.x) < b2.r * 1.6, 30);
+    // he sees it coming... too late
+    pip.action = 'startle'; pip.say('!', 0.6); pip.eyeOverride = 'wide';
+    yield* S.until(() => Math.abs(b2.x - pip.x) < b2.r * 0.9, 5);
+    // scooped up: stuck to the front of the ball, round he goes with it
+    const th0 = dir > 0 ? 0.55 : PI - 0.55, rot0 = b2.rot, half = 30;
+    pip.action = 'flail'; pip.lane = pip.laneT = 22; // on the near face of the ball, in front of the pushers
+    const spinAt = () => {
+      const th = th0 + (b2.rot - rot0), [bx, by] = b2.centre(), rr = b2.r * 0.42, spin = th - th0;
+      const mx = bx + Math.cos(th) * rr, my = by + Math.sin(th) * rr;
+      return { x: mx - Math.sin(spin) * half, y: my + Math.cos(spin) * half, rot: spin };
+    };
+    pip.attach = spinAt;
+    b2.shake.kick(4); w.puff(pip.x, pip.y - 20, 4, 9);
+    // ...until he's at the top, where the snow closes over him: only his feet stick out
+    const topAt = rot0 + (dir > 0 ? (3 * PI / 2 - th0) : (-PI / 2 - th0));
+    yield* S.until(() => (b2.rot - topAt) * dir >= 0 || Math.abs(sx + dir * 2 - b2.x) < 1, 12);
+    const [fx, fy] = b2.top();
+    w.puff(fx, fy, 6, 10, 0.8, 0.6); b2.shake.kick(5);
+    pip.hidden = true; pip.rot = 0; pip.action = 'none';
+    pip.attach = () => ({ x: b2.x, y: pip.groundY() });
+    b2.stuck = { a: -PI / 2 - b2.rot, k: 1 };
     yield rollB;
     pushB.forEach((p) => { p.eyeOverride = null; });
 
@@ -103,6 +117,8 @@
     b2.follow = false;
     yield* S.tween(0.9, (u) => { b2.x = lerp(xm0, b1x, u); b2.cy = lerp(y0, restY, SD.easeOut(u)) - Math.sin(u * PI) * 60; b2.lane = 8.5; });
     b2.cy = restY; b1.shake.kick(5); w.puff(b1x, restY + b2.r, 6, 12);
+    // the thump pushes the feet in
+    if (b2.stuck) { const [sx2, sy2] = b2.centre(), a = b2.stuck.a + b2.rot; w.puff(sx2 + Math.cos(a) * b2.r, sy2 + Math.sin(a) * b2.r, 4, 8, 0.6, 0.4); b2.stuck = null; }
     lifters.forEach((p) => { p.action = 'cheer'; }); yield 0.9; lifters.forEach((p) => { p.action = 'none'; });
 
     // ---- 4. the head goes up a ladder ----
@@ -187,7 +203,8 @@
     yield others.map((p, i) => S.run((function* () { yield* S.walk(p, sx + (i % 2 ? 1 : -1) * (b1.r + 60 + Math.floor(i / 2) * 50), 70); p.face(Math.sign(sx - p.x) || 1); })()));
     yield* cheerAll(S, others, 2.2, 5);
     // ---- 7. headcount ----
-    yield* S.walk(cap, sx + dir * (b1.r + 40), 50);
+    // to the end of the line, where he can see everyone
+    yield* S.walk(cap, sx + dir * (b1.r + 60 + Math.ceil(others.length / 2) * 50 + 20), 50);
     cap.face(-dir);
     const line = crew.slice().sort((a, b) => (a.x - b.x) * dir);
     for (let k = 0; k < line.length; k++) {
@@ -202,11 +219,13 @@
     yield 0.6; cap.eyeOverride = null;
     let panic = true;
     const searchers = [cap, ...crew];
+    // each searches their own patch, so nobody ends up standing inside anybody else
+    const bw = (S.aw * 0.8) / searchers.length;
     const search = searchers.map((p, i) => S.run((function* () {
       p.action = 'flail';
       let k = 0;
       while (panic) {
-        const tx2 = sx + S.r.range(-S.aw * 0.4, S.aw * 0.4);
+        const tx2 = sx - S.aw * 0.4 + (i + 0.5) * bw + S.r.range(-bw * 0.3, bw * 0.3);
         p.goTo(clamp(tx2, S.ax0 + 60, S.ax1 - 60), 120 + S.r() * 40);
         yield* S.until(() => p.arrived() || !panic, 4);
         if (!panic) break;
@@ -240,12 +259,13 @@
     yield 1;
     searchers.forEach((p) => { p.eyeOverride = null; });
     // group hug
+    searchers.forEach((p) => { p.snug = true; }); pip.snug = true; // a huddle: close is the point
     yield searchers.map((p, i) => S.run(S.walk(p, pip.x + (i % 2 ? 1 : -1) * (34 + Math.floor(i / 2) * 26), 120)));
     searchers.forEach((p) => { p.face(Math.sign(pip.x - p.x) || 1); p.action = 'hug'; });
     pip.action = 'cheer'; pip.say('heart', 1.6);
     for (let k = 0; k < 4; k++) { w.heart(pip.x + S.r.range(-40, 40), pip.y - 90); yield 0.4; }
     yield 0.8;
-    all.forEach((p) => { p.action = 'none'; });
+    all.forEach((p) => { p.action = 'none'; }); // still huddled: each lets go as they set off
     pip.snowCap = 0;
     // a last look at the snowman, then off
     all.forEach((p) => p.face(Math.sign(sx - p.x) || 1));
@@ -273,7 +293,9 @@
     const rocco = byKind(crew, 'rocco');
     // a cosy cocoa break
     const spot = S.cx + crewSide * S.aw * 0.12;
-    yield all.map((p, i) => S.run((function* () { yield* S.walk(p, spot + (i - all.length / 2) * 46, 70); p.face(i % 2 ? -1 : 1); p.item = SD.items.mug(); p.action = 'eat'; })()));
+    // the first in walks furthest, so nobody has to squeeze past anyone already standing
+    const c0 = (all.length - 1) / 2;
+    yield all.map((p, i) => S.run((function* () { yield* S.walk(p, spot - crewSide * (c0 - i) * 48, 70); p.face(i % 2 ? -1 : 1); p.item = SD.items.mug(); p.action = 'eat'; })()));
     yield 2.2;
     // jingle jingle... from off-screen
     for (let k = 0; k < 3; k++) { w.note(dir > 0 ? S.ax1 - 30 : S.ax0 + 30, S.ground(S.cx) - 160 - k * 20, '#e0a800'); yield 0.5; }
