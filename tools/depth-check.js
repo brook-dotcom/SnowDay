@@ -16,7 +16,7 @@ const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
 
-const ALL = ['tree', 'parade', 'ramp', 'ice', 'igloo', 'fishing', 'blizzard', 'flying', 'snowman', 'reindeer', 'parkour', 'snowball', 'zipline', 'tug', 'hockey', 'bakeoff'];
+const ALL = ['tree', 'parade', 'ramp', 'ice', 'igloo', 'fishing', 'blizzard', 'flying', 'snowman', 'reindeer', 'parkour', 'snowball', 'zipline', 'tug', 'hockey', 'bakeoff', 'supper', 'nativity'];
 const scenes = (process.argv[2] || ALL.join(',')).split(',');
 const outDir = process.argv[3] || 'depth-check';
 const page = 'file://' + path.resolve(__dirname, '../app/web/saver.html');
@@ -38,7 +38,7 @@ const page = 'file://' + path.resolve(__dirname, '../app/web/saver.html');
       if (!(await p.evaluate((s) => !!SD.SCENES[s], scene))) { console.log(`${scene}: no such scene`); break; }
       await p.evaluate(() => window.postMessage({ sdSpeed: 0 }, '*'));
       const found = await p.evaluate(() => {
-        const SOLID = ['Seesaw', 'JudgeTable', 'Easel', 'Igloo', 'Bench', 'TVCam'];
+        const SOLID = ['Seesaw', 'JudgeTable', 'Easel', 'Igloo', 'Bench', 'TVCam', 'LongTable', 'HayBale', 'Manger'];
         const free = (a) => !a.dead && !a.hidden && !a.snug && !a.attach && !a.inVehicle && !a.air && a.action !== 'hug' &&
           (a.loco === 'stand' || a.loco === 'walk' || a.loco === 'march' || a.loco === 'glide') && Math.abs(a.y - a.groundY()) < 3;
         const half = (a) => 30 * a.size * a.K.kx;

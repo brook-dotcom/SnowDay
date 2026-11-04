@@ -74,7 +74,7 @@
   body.full.still { cursor: none; }
 
   .label { color: var(--mute); font-size: 12px; font-weight: 600; line-height: 16px; margin: 14px 0 6px; }
-  .scenes { display: grid; grid-template-columns: 1fr 1fr; grid-auto-flow: column; grid-template-rows: repeat(8, 28px); column-gap: 8px;
+  .scenes { display: grid; grid-template-columns: 1fr 1fr; grid-auto-flow: column; grid-template-rows: repeat(9, 28px); column-gap: 8px;
     background: var(--surface); border-radius: var(--r-lg); box-shadow: 0 0 0 1px var(--line); padding: 6px; }
   .scene { display: flex; align-items: center; gap: 10px; padding: 0 8px; border-radius: var(--r-sm); cursor: pointer; min-width: 0; transition: background .12s var(--ease); }
   .scene:hover { background: var(--hover); }
@@ -171,6 +171,8 @@
     <symbol id="i-tug" viewBox="0 0 16 16"><path d="M1 8c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0"/><circle cx="8" cy="8" r="1.6"/></symbol>
     <symbol id="i-hockey" viewBox="0 0 16 16"><path d="M12.5 1.5 7.5 12.5h-5"/><ellipse cx="12" cy="12.5" rx="2.5" ry="1.2"/></symbol>
     <symbol id="i-bakeoff" viewBox="0 0 16 16"><path d="M2.5 7.5 8 2.5l5.5 5V14h-11z"/><path d="M6.5 14v-3h3v3M4 7.5l1 1 1-1 1 1 1-1 1 1 1-1 1 1 1-1"/></symbol>
+    <symbol id="i-supper" viewBox="0 0 16 16"><path d="M1.5 9.5h13M3 9.5v4M13 9.5v4"/><path d="M6.5 9.5V8a1.5 1.5 0 0 1 3 0v1.5M8 4.5v1"/><circle cx="8" cy="3.2" r="1.2"/></symbol>
+    <symbol id="i-nativity" viewBox="0 0 16 16"><path d="M1.5 8 8 2.5 14.5 8M3 7v6.5h10V7"/><path d="M5.5 13.5l1-3h3l1 3"/><path d="M8 0.8v1"/></symbol>
     <symbol id="i-chev" viewBox="0 0 12 12"><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-check" viewBox="0 0 10 10"><path d="M1.8 5.2 4 7.4l4.2-4.8"/></symbol>
     <symbol id="i-play" viewBox="0 0 12 12"><path d="M3 1.8v8.4L10 6z"/></symbol>
@@ -280,6 +282,8 @@ const SCENES = [
   { k: 'reindeer', name: 'First Reindeer' },
   { k: 'hockey', name: 'Hockey Night' },
   { k: 'bakeoff', name: 'Gingerbread Bake-Off' },
+  { k: 'supper', name: 'The Long Table' },
+  { k: 'nativity', name: 'Nativity Play' },
   { k: 'parkour', name: 'Parkour', tag: 'open windows', tip: 'Runs along the tops of your open windows' },
   { k: 'snowball', name: 'Snowball Fight', tag: '2 screens', dual: true },
   { k: 'zipline', name: 'Zipline', tag: '2 screens', dual: true },
@@ -416,8 +420,11 @@ addEventListener('message', (e) => {
   if (!tlDrag) paintTl(d.sdTime, Math.max(d.sdMax, d.sdTime));
 });
 const seekTo = (t) => { try { $('pv').contentWindow.postMessage({ sdSeek: Math.max(0, t) }, '*'); } catch (err) {} };
-tlBar.addEventListener('input', () => { tlDrag = true; const t = +tlBar.value; $('tlNow').textContent = fmtT(t); tlBar.style.setProperty('--tp', (100 * t / +tlBar.max) + '%'); tlBar.style.setProperty('--p', (100 * t / +tlBar.max) + '%'); wakeControls(); });
-tlBar.addEventListener('change', () => { tlDrag = false; seekTo(+tlBar.value); });
+let tlRest = null;
+tlBar.addEventListener('input', () => { tlDrag = true; const t = +tlBar.value; clearTimeout(tlRest); tlRest = setTimeout(() => seekTo(t), 160); // show the moment once the drag pauses
+  $('tlNow').textContent = fmtT(t); tlBar.style.setProperty('--tp', (100 * t / +tlBar.max) + '%'); tlBar.style.setProperty('--p', (100 * t / +tlBar.max) + '%'); wakeControls(); });
+tlBar.addEventListener('change', () => { clearTimeout(tlRest); tlDrag = false; seekTo(+tlBar.value); tlBar.blur(); });
+tlBar.addEventListener('keydown', (e) => { if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) e.preventDefault(); });
 document.querySelector('.preview').addEventListener('dblclick', (e) => { if (!e.target.closest('.over')) setFull(!document.body.classList.contains('full')); });
 document.addEventListener('mousemove', wakeControls);
 let pvScene = '', pvLoads = 0;
@@ -440,7 +447,8 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { if (document.body.classList.contains('full')) setFull(false); else { save(); post('hide'); } }
   else if (e.key === ' ' && document.body.classList.contains('full')) { e.preventDefault(); speedEl.querySelector(`[data-s="${pvSpeed === 0 ? 1 : 0}"]`).click(); }
   // full screen: arrows jump 5 seconds, comma and full stop step one frame
-  else if (document.body.classList.contains('full') && ['ArrowLeft', 'ArrowRight', ',', '.'].includes(e.key) && e.target !== tlBar) {
+  // (also when the slider has focus after a drag, where the arrows would otherwise nudge it by 1 s)
+  else if (document.body.classList.contains('full') && ['ArrowLeft', 'ArrowRight', ',', '.'].includes(e.key)) {
     e.preventDefault(); wakeControls();
     seekTo(tlNow + ({ ArrowLeft: -5, ArrowRight: 5, ',': -1 / 30, '.': 1 / 30 })[e.key]);
   }

@@ -63,7 +63,7 @@
       // a long way across open snow, empty-flippered: penguins often toboggan on their bellies
       const d = Math.abs(x - p.x);
       if (d > 320 && this.slides !== false && !p.item && !p.item2 && !p.march && !p.attach && !p.gear &&
-          (p.action === 'none' || !p.action) && p.kind !== 'captain' && p.kind !== 'stranger' && this.r() < 0.35) {
+          (p.action === 'none' || !p.action) && p.kind !== 'captain' && p.kind !== 'stranger' && this.r() < 0.35 && !this.sliding) {
         yield* this.bellySlide(p, x);
         return;
       }
@@ -74,6 +74,11 @@
     }
     // run, crouch, dive, slide on the belly (flippers paddling), pop back up, walk the last bit
     *bellySlide(p, x) {
+      // one slider at a time: a row of penguins all lying on top of each other reads as a pile-up
+      this.sliding = p;
+      try { yield* this._bellySlide(p, x); } finally { if (this.sliding === p) this.sliding = null; }
+    }
+    *_bellySlide(p, x) {
       const dir = Math.sign(x - p.x) || 1, w = this.w;
       p.goTo(p.x + dir * 36, 95);
       yield* this.until(() => p.arrived(), 3);

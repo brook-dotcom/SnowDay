@@ -655,6 +655,7 @@
     const lb = X(xsL - 62), lby = S.ground(lb) + 3;
     const L1 = S.add(new SD.Ladder(w, lb, lby, X(xsL + 40), lby - 172, 3)); L1.show = 0;
     const ladGuy = shovelers[0];
+    ladGuy.laneT = 6; // off for the ladder and back along the back, behind anyone standing about
     yield* S.walk(ladGuy, enter, 140);
     ladGuy.item = SD.items.ladder(); ladGuy.action = 'carryLadder';
     yield* S.walk(ladGuy, X(xsL - 100), 70);

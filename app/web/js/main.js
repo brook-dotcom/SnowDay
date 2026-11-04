@@ -411,24 +411,52 @@
   };
 
   SD.reboot = (cfg) => { window.__SNOW = cfg; boot(); };
-  // jump to a moment of the preview: forward by playing on fast, back by replaying from the start
-  let seekJob = 0;
+  // jump to a moment of the preview: forward by playing on fast, back by replaying from the start.
+  // One replay runs at a time and just retargets if asked again (dragging, holding an arrow key);
+  // going back holds the last picture on screen until the new moment is ready, instead of flashing
+  // through the replay.
+  let seekTarget = 0, seekRun = 0, hold = null;
+  const holdFrame = () => {
+    if (!hold) {
+      hold = document.createElement('canvas');
+      hold.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;z-index:50;pointer-events:none';
+      document.body.appendChild(hold);
+    }
+    const cv = document.getElementById('cv'), bg = document.getElementById('bg');
+    hold.width = cv.width; hold.height = cv.height;
+    const h = hold.getContext('2d');
+    if (bg) h.drawImage(bg, 0, 0, hold.width, hold.height);
+    const tint = document.getElementById('tint'), op = tint ? +(tint.style.opacity || 0) : 0;
+    if (op > 0.001) {
+      // the dimming layer sits between the two canvases
+      const W2 = hold.width, H2 = hold.height, g = h.createRadialGradient(W2 * 0.5, H2 * 0.4, 0, W2 * 0.5, H2 * 0.4, Math.hypot(W2 * 0.5, H2 * 0.6));
+      g.addColorStop(0, 'rgba(18,34,68,0.55)'); g.addColorStop(1, 'rgba(8,16,36,0.85)');
+      h.globalAlpha = op; h.fillStyle = g; h.fillRect(0, 0, W2, H2); h.globalAlpha = 1;
+    }
+    h.drawImage(cv, 0, 0, hold.width, hold.height);
+    hold.style.display = 'block';
+  };
+  const tell = (busy) => {
+    try { window.parent.postMessage({ sdTime: busy ? seekTarget : SD.simTime(), sdMax: Math.max(SD.maxT || 0, seekTarget, SD.simTime()), sdSeeking: busy }, '*'); } catch (e) {}
+  };
   SD.seek = (t) => {
-    const job = ++seekJob;
-    t = Math.max(0, t);
-    if (t < SD.simTime() - 1e-6) SD.reboot(Object.assign({}, SD.cfg, { speed: SD.speedNow() }));
+    seekTarget = Math.max(0, t);
+    if (seekTarget < SD.simTime() - 1e-6) {
+      if (!hold || hold.style.display !== 'block') holdFrame();
+      SD.reboot(Object.assign({}, SD.cfg, { speed: SD.speedNow() }));
+    }
     SD.seeking = true;
+    tell(true);
+    const run = ++seekRun;
     const go = () => {
-      if (job !== seekJob) return;
+      if (run !== seekRun) return; // a newer request took over
       const t0 = performance.now();
-      while (performance.now() - t0 < 14 && SD.simTime() < t - 1e-6) SD.stepN(Math.max(1, Math.min(30, Math.round((t - SD.simTime()) * 60))));
+      while (performance.now() - t0 < 30 && SD.simTime() < seekTarget - 1e-6) SD.stepN(Math.max(1, Math.min(30, Math.round((seekTarget - SD.simTime()) * 60))));
+      if (SD.simTime() < seekTarget - 1e-6) { setTimeout(go, 0); return; }
       SD.renderNow();
-      if (SD.simTime() < t - 1e-6) {
-        try { window.parent.postMessage({ sdTime: SD.simTime(), sdMax: Math.max(SD.maxT || 0, t), sdSeeking: true }, '*'); } catch (e) {}
-        setTimeout(go, 0); return;
-      }
+      if (hold) hold.style.display = 'none';
       SD.seeking = false; SD.syncClock();
-      try { window.parent.postMessage({ sdTime: SD.simTime(), sdMax: Math.max(SD.maxT || 0, SD.simTime()), sdSeeking: false }, '*'); } catch (e) {}
+      tell(false);
     };
     go();
   };

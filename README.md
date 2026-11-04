@@ -30,7 +30,7 @@ beanie penguins.
 ## Scenes
 
 Deck the Tree, Candy Parade, The Big Ramp, Ice Day, Igloo Contest, Ice Fishing, Blizzard, Flying Lessons,
-Giant Snowman, First Reindeer, Hockey Night, Gingerbread Bake-Off, Parkour (runs along your open windows),
+Giant Snowman, First Reindeer, Hockey Night, Gingerbread Bake-Off, The Long Table, Nativity Play, Parkour (runs along your open windows),
 and with two screens side by side:
 Snowball Fight, Zipline, Tug-of-War.
 

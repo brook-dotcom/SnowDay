@@ -311,14 +311,15 @@
           P.aF = -0.9 + Math.sin(this.cyc) * 0.75; P.aB = -1.0 + Math.sin(this.cyc) * 0.75;
           break;
         case 'prone': {
-          // tobogganing: flat on the belly, head up, flippers digging in turn, feet flicking behind
-          const sp = Math.min(1, Math.abs(this.vx || 0) / 140), st = this.t * (5.2 + sp * 1.6) + this.id;
-          const dig = Math.sin(st), dig2 = Math.sin(st + PI);
-          P.prone = 1; P.pitch = -0.1 + Math.sin(st - 0.9) * 0.07 * sp; // nose up, rocking with each stroke
-          P.aF = -0.95 + dig * 0.6; P.aB = -0.95 + dig2 * 0.6;
-          P.fFx = -3 + dig * 3; P.fBx = 3 - dig * 3;
-          P.fFy = -4 - Math.max(0, dig2) * 6 * (this.kick || 0); P.fBy = -4 - Math.max(0, dig) * 6 * (this.kick || 0);
-          P.sq = 1 + Math.cos(st) * 0.025 * sp; P.bob = Math.max(0, dig) * 1.2 * sp;
+          // tobogganing: flat on the belly with the nose up, flippers held back along the sides like
+          // a swimmer's, feet paddling behind to push
+          const sp = Math.min(1, Math.abs(this.vx || 0) / 140), st = this.t * (6 + sp * 2) + this.id;
+          const kick = this.kick || 0;
+          P.prone = 1; P.pitch = -0.08 + Math.sin(st * 0.5) * 0.025;
+          P.aF = 0.22 + Math.sin(st * 1.7) * 0.03 * sp; P.aB = -0.06;
+          P.fFx = -2 + Math.sin(st) * 4 * kick; P.fBx = 2 - Math.sin(st) * 4 * kick;
+          P.fFy = -3 - Math.max(0, Math.sin(st)) * 7 * kick; P.fBy = -3 - Math.max(0, -Math.sin(st)) * 7 * kick;
+          P.sq = 1; P.bob = 0;
           break;
         }
         case 'scrabble':
@@ -451,6 +452,14 @@
         case 'pant': P.crouch = 0.25; P.lean = 0.3; P.aF = -0.45; P.aB = -0.55; P.beak = 0.5 + Math.sin(t * 12) * 0.3; eyes = 'closed'; P.bob += Math.sin(t * 12) * 1.2; break;
         case 'boom': P.aF = -2.45; P.aB = -2.25; P.lean = -0.04; break;
         case 'present': P.aF = -1.25; P.aB = -1.35; P.beak = 0.3; eyes = 'happy'; break;
+        // the nativity and the long table
+        case 'kneel': P.crouch = 0.75; P.fFx = 12; P.fBx = 14; P.fFy = -2; P.fBy = -2; P.aF = -1.0; P.aB = -1.1; P.lean = 0.08; break;
+        case 'pray': P.aF = -1.32; P.aB = -1.42; P.lean = 0.06; eyes = 'closed'; P.beak = 0; break;
+        case 'bow': P.lean = 0.42; P.crouch = 0.1; P.aF = 0.5; P.aB = -0.4; eyes = 'happy'; break;
+        case 'lean': P.lean = 0.2 + Math.sin(t * 1.1 + this.id) * 0.02; P.aF = -0.9; P.aB = -0.7; P.beak = Math.max(0, Math.sin(t * 6 + this.id)) * 0.4; break;
+        case 'self': P.aF = -1.8; P.aB = -0.3; P.lean = -0.06; P.beak = 0.5; eyes = 'wide'; break;
+        case 'raise': P.aF = 2.0 + Math.sin(t * 1.5 + this.id) * 0.05; P.aB = -2.0; P.lean = -0.08; P.beak = 0.6; eyes = 'wide'; break;
+        case 'offer': P.aF = -1.5; P.aB = -1.6; P.lean = 0.1; P.beak = 0.15; break;
         case 'drill': P.crouch = 0.35; P.lean = 0.3; P.aF = -0.75; P.aB = -0.85; P.roll += Math.sin(t * 24) * 0.02; break;
       }
       if (this.armF != null) P.aF = this.armF;
@@ -514,8 +523,6 @@
         const f = Math.sign(this.fx) || 1, L = clamp(Math.abs(this.vx) * 0.45, 20, 120) * this.size;
         ctx.globalAlpha = 0.16 * this.alpha; ctx.fillStyle = '#35507e';
         ctx.beginPath(); ctx.ellipse(this.x - f * (L * 0.55 + 20 * s), gy + 1, L * 0.55, 2.6 * s, 0, 0, TAU); ctx.fill();
-        ctx.globalAlpha = 0.9 * this.alpha; ctx.fillStyle = '#f4f8ff';
-        ctx.beginPath(); ctx.ellipse(this.x + f * 38 * this.size, gy - 1, 10 * s, 5 * s, 0, 0, TAU); ctx.fill();
       }
       ctx.restore();
     }
@@ -530,6 +537,10 @@
       if (this.sinkClip) {
         const sy = this.world.surfaceY(this.x) + this.lane * 0.3;
         ctx.beginPath(); ctx.rect(this.x - 200, sy - 600, 400, 600); ctx.clip();
+      } else if (p.prone > 0.5 && !this.air && !this._partOnly) {
+        // sliding: whatever is below the snow line stays hidden
+        const sy = this.world.surfaceY(this.x) + this.lane + 3;
+        ctx.beginPath(); ctx.rect(this.x - 300, sy - 600, 600, 600); ctx.clip();
       }
       ctx.globalAlpha = this.alpha;
       ctx.translate(this.x, this.y + p.bob);
@@ -540,12 +551,13 @@
       ctx.scale(sx * s * this.K.kx / Math.sqrt(p.sq), s * p.sq * this.K.ky);
       // prone rotation around belly center
       if (p.prone > 0.001) {
-        ctx.translate(0, -2 * p.prone);
+        ctx.translate(0, 5 * p.prone * (this.air ? 0 : 1)); // the belly sinks into the snow a little
         ctx.translate(0, -34); ctx.rotate(p.prone * 1.5 + p.pitch); ctx.translate(0, 34);
       }
       const cr = p.crouch * 12;
       this._drawBody(ctx, cr);
       ctx.restore();
+      if (p.prone > 0.5 && !this._partOnly && !this.air) this._snowLip(ctx);
 
       if (this._partOnly || SD.reflecting) return;
       // bubble / dizzy overlay (unrotated)
@@ -575,6 +587,8 @@
       if (this.kind === 'rocco') this._plumes(ctx, true);
       // scarf tail (behind if blown back)
       ctx.restore();
+      // costume parts that hang behind the body (wings, a cloak's back)
+      if (this.costumeBack) { ctx.save(); ctx.translate(0, cr); this.costumeBack(ctx, this); ctx.restore(); }
 
       ctx.save();
       ctx.translate(0, cr);
@@ -645,6 +659,8 @@
       else if (K === 'stranger') this._fancyHat(ctx);
       else this._hat(ctx);
       ctx.restore();
+      // dressing up: head-dresses, crowns, a halo (head-local, drawn over the hat)
+      if (this.costume) { ctx.save(); this.costume(ctx, this); ctx.restore(); }
       if (this.snowCap > 0.05) this._snowDrift(ctx);
       ctx.restore();
 
@@ -985,6 +1001,34 @@
       const flakes = [[-24, -62], [-20, -91], [-26, -46], [-12, -100], [-15, -75], [-28, -34], [20, -99], [-22, -22]];
       const nf = Math.round(c * flakes.length);
       for (let i = 0; i < nf; i++) { const [x, y] = flakes[(i * 3 + id) % flakes.length]; ctx.beginPath(); ctx.arc(x + rnd(i + 30) * 2, y, 1 + rnd(i + 40) * 1.2, 0, TAU); ctx.fill(); }
+      ctx.restore();
+    }
+    // a sliding belly sits down in the snow: a soft lip of snow along it, heaped up at the front
+    _snowLip(ctx) {
+      const f = Math.sign(this.fx) || 1, s = this.size, gy = this.world.surfaceY(this.x) + this.lane;
+      const v = Math.min(1, Math.abs(this.vx || 0) / 160);
+      ctx.save();
+      ctx.globalAlpha = this.alpha;
+      ctx.translate(this.x, gy); ctx.scale(f * s, s);
+      const front = 50, back = -60, hf = 9 + v * 6, hb = 5.5;
+      const edge = () => {
+        ctx.moveTo(back, 1);
+        ctx.bezierCurveTo(back + 18, -hb, front - 50, -hb - 1, front - 18, -hf * 0.75);
+        ctx.quadraticCurveTo(front - 6, -hf - 1.5, front + 5, -2);
+        ctx.quadraticCurveTo(front + 9, 1, front + 3, 3);
+      };
+      ctx.beginPath(); edge(); ctx.lineTo(back, 3); ctx.closePath();
+      const g = ctx.createLinearGradient(0, -hf, 0, 3);
+      g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#e3ecf7');
+      ctx.fillStyle = g; ctx.fill();
+      ctx.strokeStyle = 'rgba(120,150,200,0.6)'; ctx.lineWidth = 1.3;
+      ctx.beginPath(); edge(); ctx.stroke();
+      // snow kicked up off the front
+      if (v > 0.3) {
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        const t = this.t * 9;
+        for (let k = 0; k < 4; k++) { const u = ((t + k * 0.25) % 1); ctx.beginPath(); ctx.arc(front + 4 + u * 16, -hf - u * 10 + u * u * 14, 2.2 * (1 - u) + 0.6, 0, TAU); ctx.fill(); }
+      }
       ctx.restore();
     }
     _flipper(ctx, px, py, a, back) {

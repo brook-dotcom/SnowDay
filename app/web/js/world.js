@@ -234,15 +234,24 @@
     }
 
     // ---------- simulation ----------
+    // how far a flake drifts sideways on its way down: snow has to start that far upwind, past the
+    // edge of the screen, or the windward side never gets any and the bank piles up in a hump
+    upwind(drift, vy) { return clamp(drift * (this.H + 120) / (vy * 0.85), -1800, 1800); }
+    spawnSpan(drift, vy) {
+      const u = this.upwind(drift, vy);
+      return u > 0 ? [-150 - u, this.W + 150] : [-150, this.W + 150 - u];
+    }
     targetFlakes(layer) {
       const base = [300, 420, 26][layer];
-      return Math.round(base * this.areaScreens * this.snowNow * this.settings.density);
+      const [a, b] = this.spawnSpan(this.wind * (0.6 + layer * 0.35), [22, 46, 95][layer]);
+      return Math.round(base * this.areaScreens * this.snowNow * this.settings.density * (b - a) / (this.W + 300));
     }
     spawnFlake(layer, anywhere) {
       const r = this.rng;
+      const [a, b] = this.spawnSpan(this.wind * (0.6 + layer * 0.35), [22, 46, 95][layer]);
       const f = {
         l: layer,
-        x: r() * (this.W + 300) - 150,
+        x: a + r() * (b - a),
         y: anywhere ? r() * this.H : -10 - r() * 120,
         vy: [22, 46, 95][layer] * (0.75 + r() * 0.5),
         r: [1.1, 2.0, 5.5][layer] * (0.7 + r() * 0.7),
@@ -294,6 +303,8 @@
         if (y >= this.surfaceY(x) && x >= 0 && x <= W) { landings.push(x); if (visible) this._rest(f, x, -1, 0); return true; }
         return false;
       };
+      // off the downwind side a flake is gone for good; upwind ones are still on their way in
+      const gone = (x) => (this.wind >= 0 ? x > W + 200 || x < -2000 : x < -200 || x > W + 2000);
       const keep = [];
       for (const f of this.flakes) {
         const py = f.y;
@@ -302,25 +313,26 @@
         f.rot += f.vr * dt;
         let dead = f.l === 1 && meet(f.x, py, f.y, true, f);
         if (f.y > H + 20) dead = true;
-        if (f.x < -200 || f.x > W + 200) dead = true;
+        if (gone(f.x)) dead = true;
         if (!dead) keep.push(f);
       }
       this.flakes = keep;
       // fine snow falls with the same wind and sway as the visible middle layer
       // (only needed while the bank is building; otherwise nothing is collecting)
       const building = this.accum > 0 || this.snowDue > 0;
-      const fineTgt = building ? Math.round(2500 * this.areaScreens * Math.min(1, this.snowNow)) : 0;
+      const [fa, fb] = this.spawnSpan(this.wind * 0.95, 46);
+      const fineTgt = building ? Math.round(2500 * this.areaScreens * Math.min(1, this.snowNow) * (fb - fa) / (W + 300)) : 0;
       let fineBudget = Math.ceil(fineTgt * dt) + 1;
       const r = this.rng;
       while (this.fine.length < fineTgt && fineBudget-- > 0) {
-        this.fine.push({ x: r() * (W + 300) - 150, y: -10 - r() * 120, vy: 46 * (0.75 + r() * 0.5), ph: r() * SD.TAU, sw: 0.4 + r() * 1.2, amp: 9 * (0.4 + r()) });
+        this.fine.push({ x: fa + r() * (fb - fa), y: -10 - r() * 120, vy: 46 * (0.75 + r() * 0.5), ph: r() * SD.TAU, sw: 0.4 + r() * 1.2, amp: 9 * (0.4 + r()) });
       }
       const fineKeep = [];
       for (const f of this.fine) {
         const py = f.y;
         f.y += f.vy * dt;
         f.x += (this.wind * 0.95 + Math.sin(t * f.sw + f.ph) * f.amp) * dt;
-        if (meet(f.x, py, f.y, false) || f.y > H + 20 || f.x < -200 || f.x > W + 200) continue;
+        if (meet(f.x, py, f.y, false) || f.y > H + 20 || gone(f.x)) continue;
         fineKeep.push(f);
       }
       this.fine = fineKeep.length > fineTgt * 1.5 + 50 ? fineKeep.slice(0, Math.ceil(fineTgt * 1.5) + 50) : fineKeep;
