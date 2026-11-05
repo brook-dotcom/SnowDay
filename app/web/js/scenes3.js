@@ -23,7 +23,20 @@
     const dir = Math.sign(toX - ball.x) || 1;
     const x0 = ball.x, r0 = ball.r, dist = Math.abs(toX - x0);
     pushers.forEach((p) => { p.face(dir); p.action = 'push'; p.target = null; });
-    const place = () => pushers.forEach((p, i) => { p.attach = () => ({ x: ball.x - dir * (ball.r + 24 + i * 34), y: p.groundY() }); });
+    // side by side against the back of the ball, one a little further from us than the other,
+    // so every pusher has their flippers on the snow (never one pushing the one in front)
+    const n = pushers.length, lane0 = pushers.map((p) => p.lane);
+    const place = () => pushers.forEach((p, i) => {
+      const off = n === 1 ? 0 : (i - (n - 1) / 2);
+      p.attach = () => {
+        // one at the back of the ball, the other nearer us with his flippers on its near side:
+        // far enough apart that you can see both of them pushing
+        const front = off > 0, k = clamp(ball.r / 60, 0.3, 1);
+        p.lane = p.laneT = ball.lane + (n === 1 ? 0 : front ? 4 + 8 * k : -3);
+        const dx = n === 1 || !front ? ball.r + 20 : ball.r * 0.5 + 16;
+        return { x: ball.x - dir * dx, y: p.groundY() };
+      };
+    });
     place();
     while (Math.abs(toX - ball.x) > 0.5) {
       const step = Math.min(Math.abs(toX - ball.x), sp * S.dt);
@@ -33,7 +46,7 @@
       if (S.r() < 0.05) S.w.puff(ball.x - dir * ball.r * 0.6, ball.y, 1, 6, 0.6, 0.4);
       yield 0;
     }
-    pushers.forEach((p) => { p.attach = null; p.loco = 'stand'; p.action = 'none'; p.y = p.groundY(); });
+    pushers.forEach((p, i) => { p.attach = null; p.loco = 'stand'; p.action = 'none'; p.y = p.groundY(); p.laneT = lane0[i]; }); // and step back to where they were
   }
 
   // =====================================================================

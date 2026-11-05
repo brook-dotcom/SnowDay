@@ -6,6 +6,7 @@ after a version number to have installed copies update without asking.
 ## 1.5.2
 - New scene: The Long Table. The crew sets up a hall after Leonardo's painting, each one brings something to share, and for a moment the table becomes the painting
 - New scene: Nativity Play. The crew builds the stable, then puts on the play: shepherds and a wandering sheep, an angel on a hay bale, and three kings
+- Giant Snowman: the two rollers push the ball side by side, both with their flippers on the snow
 - Belly-slides: the penguin lies in the snow with its flippers held back, ploughing a little wave of snow, and only one slides at a time
 - Snow drifts in from past the edges of the screen, so the bank builds up evenly instead of in a hump
 - Preview timeline: scrubbing holds the picture while it catches up, follows the drag, and the arrow keys work after dragging
