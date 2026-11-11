@@ -927,7 +927,7 @@
     yield 0.4;
     cast.forEach((p) => { p.action = 'bow'; });
     yield 1.2;
-    cast.forEach((p) => { p.action = 'cheer'; });
+    S.finale(); cast.forEach((p) => { p.action = 'cheer'; });
     hand.say('heart', 1.2);
     yield 1.6;
     cast.forEach((p) => { p.action = 'none'; });

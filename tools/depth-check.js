@@ -9,6 +9,10 @@
 //            kitchen bench, TV camera, the limbo bar), at that prop's depth
 //   join     (two-screen scenes) a penguin standing still across the join between the screens,
 //            where the bezels would cut it in half
+//   edge     a penguin standing still half off the side of the screen
+//   hidden   a penguin standing still with its face behind another standing penguin
+//   layout   a scene's own plan (S.marks) puts two places on top of each other
+// Use --strict to also fail on hidden/edge (they are reported either way).
 // Hugs, huddles (p.snug), anyone carried, riding, sitting, climbing or in the air are ignored.
 // Prints each problem once (with how long it lasted) and saves a picture of each to outDir
 // (default ./depth-check) for a look before shipping. Exits 1 if anything was found.
@@ -16,9 +20,10 @@ const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
 
-const ALL = ['tree', 'parade', 'ramp', 'ice', 'igloo', 'fishing', 'blizzard', 'flying', 'snowman', 'reindeer', 'parkour', 'snowball', 'zipline', 'tug', 'hockey', 'bakeoff', 'supper', 'nativity'];
-const scenes = (process.argv[2] || ALL.join(',')).split(',');
-const outDir = process.argv[3] || 'depth-check';
+const ALL = ['tree', 'parade', 'ramp', 'ice', 'igloo', 'fishing', 'blizzard', 'flying', 'snowman', 'reindeer', 'parkour', 'snowball', 'zipline', 'tug', 'hockey', 'bakeoff', 'supper', 'nativity', 'trebuchet', 'card', 'grotto', 'countdown', 'workshop', 'biscuits', 'carols', 'town'];
+const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const scenes = (args[0] || ALL.join(',')).split(',');
+const outDir = args[1] || 'depth-check';
 const page = 'file://' + path.resolve(__dirname, '../app/web/saver.html');
 
 (async () => {
@@ -59,7 +64,7 @@ const page = 'file://' + path.resolve(__dirname, '../app/web/saver.html');
             if (Math.abs(a.x - c.x) < lim) seen.add(`overlap|${a.kind}#${a.id}|${c.kind}#${c.id}|${(a.x + c.x) / 2}|${a.y}`);
           }
           for (const pr of w.props) {
-            if (pr.dead || !SOLID.includes(pr.constructor.name) || !pr.bbox || pr.lift > 0 || pr.alpha < 0.5) continue;
+            if (pr.dead || !(SOLID.includes(pr.constructor.name) || pr.solid) || !pr.bbox || pr.lift > 0 || pr.alpha < 0.5) continue;
             const [x0, , x1] = pr.bbox();
             for (const a of as) {
               if (a.loco !== 'walk' || a.using === pr || Math.abs(a.lane - pr.lane) > 3) continue; // a.using: meant to (going into an igloo)
@@ -78,6 +83,16 @@ const page = 'file://' + path.resolve(__dirname, '../app/web/saver.html');
               if (Math.abs(a.x - bx) < 10) seen.add(`through|${a.kind}#${a.id}|limbo bar|${a.x}|${a.y}`);
             }
           }
+          // face hidden behind someone standing in front; cut off by the side of the screen
+          const still = w.actors.filter((a) => free(a) && a.loco === 'stand' && !a.target && Math.abs(a.vx || 0) < 2);
+          for (const a of still) {
+            if (a.x > v.x0 - half(a) && a.x < vx1 + half(a) && (a.x < v.x0 + half(a) * 0.7 || a.x > vx1 - half(a) * 0.7)) seen.add(`edge|${a.kind}#${a.id}|screen edge|${a.x}|${a.y}`);
+            for (const c of still) {
+              if (c === a) continue;
+              const dl = c.lane - a.lane; // c nearer the glass
+              if (dl > 4 && dl < 24 * c.size / 0.74 && Math.abs(a.x - c.x) < 13 * (a.size + c.size) / 2 && a.x > v.x0 && a.x < vx1) seen.add(`hidden|${a.kind}#${a.id}|${c.kind}#${c.id}|${a.x}|${a.y}`);
+            }
+          }
           // standing on the join between two screens
           const joins = (w.screens || []).slice(1).map((sc) => sc.x0);
           for (const a of as) {
@@ -93,9 +108,11 @@ const page = 'file://' + path.resolve(__dirname, '../app/web/saver.html');
           }
         }
         done.push(...runs.values());
-        for (const r of done) if (r.t1 - r.t0 >= (r.k.startsWith('overlap') ? 1 : r.k.startsWith('join') ? 1.5 : 0.25)) { const [kind, a, b2, x, y] = r.k.split('|'); out.push({ kind, a, b: b2, x: +x, y: +y, t0: r.t0, t1: r.t1 }); }
-        return { out, started };
+        const need = { overlap: 1, join: 1.5, edge: 2, hidden: 3, through: 0.25 };
+        for (const r of done) if (r.t1 - r.t0 >= need[r.k.split('|')[0]]) { const [kind, a, b2, x, y] = r.k.split('|'); out.push({ kind, a, b: b2, x: +x, y: +y, t0: r.t0, t1: r.t1 }); }
+        return { out, started, layout: SD.layoutWarnings || [] };
       });
+      for (const l of new Set(found.layout)) { problems++; console.log(`${scene} seed ${seed}  layout  ${l}`); }
       for (const f of found.out) {
         problems++;
         console.log(`${scene} seed ${seed}  ${f.kind.padEnd(7)} ${f.a} / ${f.b}  ${f.t0.toFixed(1)}–${f.t1.toFixed(1)}s`);
@@ -112,7 +129,7 @@ const page = 'file://' + path.resolve(__dirname, '../app/web/saver.html');
         const cx = Math.max(300, Math.min(1620, at[0])), cy = Math.max(200, Math.min(880, at[1] - 60));
         await p.screenshot({ path: path.join(outDir, `${scene}-${seed}-${f.t0.toFixed(1)}-${f.kind}.png`), clip: { x: cx - 300, y: cy - 200, width: 600, height: 400 } });
       }
-      if (!found.out.length) console.log(`${scene} seed ${seed}  ok`);
+      if (!found.out.length && !found.layout.length) console.log(`${scene} seed ${seed}  ok`);
     }
   }
   await b.close();

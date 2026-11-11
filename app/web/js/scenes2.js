@@ -209,7 +209,7 @@
         judges.forEach((J, j) => { if (j !== fan) { J.face(Math.sign(judges[fan].x - J.x) || 1); J.say('?', 1.2); } });
         judges[fan].eyeOverride = 'happy';
       }
-      (ig === LI ? loungeTeam : oiTeam).forEach((p) => { p.action = sum(sc) >= 21 ? 'cheer' : sum(sc) >= 15 ? 'clap' : 'sleepy'; });
+      S.finale(); (ig === LI ? loungeTeam : oiTeam).forEach((p) => { p.action = sum(sc) >= 21 ? 'cheer' : sum(sc) >= 15 ? 'clap' : 'sleepy'; });
       yield 2.2;
       judges.forEach((J) => { J.item = null; J.action = 'none'; J.eyeOverride = null; });
       [...teamA, ...teamB].forEach((p) => { p.action = 'none'; });
@@ -694,7 +694,8 @@
     lofty._bx = lofty.x;
     yield* S.tween(4, (u) => { lift = 230 * SD.easeInOut(u); drift = Math.sin(u * 3) * 40 + w.wind * u * 0.6; });
     cap.say('!', 1); whistle(S, cap, 2);
-    kids.forEach((p) => { if (p !== lofty) { p.action = 'lookUp'; p.goTo(lofty._bx + drift + S.r.range(-60, 60), 90); } });
+    // they run to stand under him: spread out across the stage and in depth, and never off the edge
+    kids.forEach((p, i) => { if (p !== lofty) { p.action = 'lookUp'; p.laneT = 16 + i * 4.5; p.goTo(clamp(lofty._bx + drift + (i - kids.length / 2) * 52 + S.r.range(-12, 12), S.ax0 + 70, S.ax1 - 70), 90); } });
     for (let k = 0; k < 4; k++) {
       yield 0.9;
       bal.pops++;
@@ -726,7 +727,7 @@
     // a gold star for the class
     yield* S.walk(cap, glider.x - dir * 50, 60);
     cap.face(dir);
-    glider.item = SD.items.star(); glider.action = 'cheer';
+    S.finale(); glider.item = SD.items.star(); glider.action = 'cheer';
     w.sparkle(glider.x, glider.y - 120, 8, '#ffe066', 8);
     yield 2;
     glider.item = null;
@@ -859,7 +860,7 @@
         p.rot = 0;
       }
       w.puff(p.x, p.y, 6, 10);
-      p.laneT = 14; p.action = 'cheer';
+      S.finale(); p.laneT = 14; p.action = 'cheer';
       yield 1.2;
       p.action = 'none';
     }
@@ -975,7 +976,7 @@
     }
     w.puff(ball.x, ball.y, 26, 30, 1.6, 1.2);
     ball.dead = true;
-    roller.action = 'cheer'; rTeam.forEach((p) => { p.action = 'cheer'; });
+    S.finale(); roller.action = 'cheer'; rTeam.forEach((p) => { p.action = 'cheer'; });
     yield 2;
     // truce in the middle (one team on each screen)
     all.forEach((p) => { p.action = 'none'; });
@@ -1066,7 +1067,7 @@
         p.jump(-260, 0); w.puff(p.x, p.y, 6, 10);
         yield* S.until(() => !p.air, 2);
       }
-      p.action = 'cheer'; yield 1; p.action = 'none';
+      S.finale(); p.action = 'cheer'; yield 1; p.action = 'none';
       p.laneT = 14;
       yield* S.walk(p, anchorX + dir * 160 + S.r.range(-40, 40), 70);
       p.face(-dir);

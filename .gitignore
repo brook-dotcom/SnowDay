@@ -28,3 +28,6 @@ desktop.ini
 .vscode/
 .idea/
 /depth-check/
+/depth-check/
+stage-map-*.png
+replay-*.png

@@ -265,7 +265,7 @@
     S.run(S.tween(2.6, (u) => { T.lights = u; }));
     yield 0.6;
     const all = [carriers[0], carriers[1], carriers[2], carriers[3], boxer];
-    all.forEach((p) => { p.action = 'cheer'; p.face(p.x < cx ? 1 : -1); });
+    S.finale(); all.forEach((p) => { p.action = 'cheer'; p.face(p.x < cx ? 1 : -1); });
     for (let k = 0; k < 6; k++) { const p = all[k % all.length]; w.heart(p.x, p.y - 70); yield 0.25; }
     yield 1.2;
     all.forEach((p) => { p.action = 'none'; });
@@ -491,7 +491,7 @@
     bar.dead = barFar.dead = true;
     yield 0.3;
     yield* S.walk(champ, bx, 60);
-    champ.action = 'cheer'; champ.say('heart', 2);
+    S.finale(); champ.action = 'cheer'; champ.say('heart', 2);
     band.forEach((q) => { if (q !== champ && q !== h1 && q !== h2) { q.action = 'clap'; q.face(q.x < bx ? 1 : -1); } });
     for (let k = 0; k < 6; k++) { w.sparkle(champ.x + S.r.range(-30, 30), champ.y - 80 + S.r.range(-20, 20), 2, '#ffd43b', 6); yield 0.25; }
     yield 1.5;
@@ -511,8 +511,9 @@
   }
 
   // =====================================================================
-  // 3) THE BIG RAMP — shovel a kicker, test it, grow it with mini ladders,
-  //    a bucket brigade, then sled jumps (and a toboggan pile-up).
+  // 3) THE BIG RAMP — shovel a kicker and test it (a small hop), stack ladders and pass blocks up
+  //    to make it enormous, then the big one: off the kicker, out of the top of the picture, and
+  //    straight back down through the snow. No walking over the mound, no standing about.
   // =====================================================================
   function* sceneRamp(S) {
     const w = S.w, r = S.r, D = S.D;
@@ -574,7 +575,7 @@
             const [hx, hy] = p.localToWorld(30, -105);
             const tx = target(), ty = w.surfaceY(tx);
             const T = 0.85, gg = 900;
-            w.chunk(hx, hy, (tx - hx) / T, (ty - hy - 0.5 * gg * T * T) / T, 5.5, () => { Hcur = Math.min(Hcur + 1.05, 400); });
+            w.chunk(hx, hy, (tx - hx) / T, (ty - hy - 0.5 * gg * T * T) / T, 5.5, () => { Hcur = Math.min(Hcur + 3.2, 400); });
           }
         });
         p._dug = false;
@@ -582,294 +583,211 @@
       }
       p.action = 'none'; p.item = null; p.cyc = 0;
     }
-    const shCos = shovelers.map((p, i) => S.run(shovelLoop(p, digSpots[i], () => false)));
-    yield* S.until(() => Hcur >= 66, 70);
+    // The captain doesn't dig: he brings the ladder and stands it against the back of the mound, so
+    // nobody ever has to walk over the top to get up it.
+    const cap = shovelers[0], diggers = shovelers.slice(1);
+    const lb = X(xsL - 62), lby = S.ground(lb) + 3;
+    const L1 = S.add(new SD.Ladder(w, lb, lby, X(xsL + 40), lby - 172, 3)); L1.show = 0;
+    const shCos = diggers.map((p, i) => S.run(shovelLoop(p, digSpots[i + 1], () => false)));
+    cap.laneT = cap.lane = 6; cap.item = SD.items.ladder(); cap.action = 'carryLadder';
+    yield* S.walk(cap, X(xsL - 100), 70);
+    cap.item = null; cap.action = 'plant';
+    yield* S.tween(0.9, (u) => { L1.show = SD.backOut(u); });
+    cap.action = 'none'; cap.laneT = 20;
+    yield* S.walk(cap, X(xsL - 190), 60); cap.face(dir);
+    yield* S.until(() => Hcur >= 66, 40);
     shovelOn = false;
     yield shCos;
-    shovelers.forEach((p) => { p.action = 'clap'; p.face(L(p.x) < g().xr ? dir : -dir); });
-    yield 1;
-    shovelers.forEach((p) => { p.action = 'none'; });
+    diggers.forEach((p) => { p.face(L(p.x) < g().xr ? dir : -dir); });
 
-    // ---- a sled and the test run ----
-    const sled = S.add(new SD.Sled(w, X(xsL - 160), 3)); sled.facing = dir; sled.alpha = 0;
-    const sledder = S.spawn({ x: enter, lane: 14, facing: dir });
-    crew.push(sledder);
-    sledder.item = SD.items.sledUp(); sledder.action = 'carryUp';
-    sled.dead = true;
-
-    function* ride(riders, sl, opts = {}) {
+    function* ride(riders, sl) {
       riders.forEach((p, i) => {
         p.loco = 'sit'; p.target = null; p.laneT = p.lane = sl.lane + 0.5 + i * 0.01; p.action = 'none';
-        p.attach = () => { const s = sl.seat(i); return { x: s.x, y: s.y, rot: s.rot, facing: sl.facing }; };
+        p.attach = () => { const st = sl.seat(i); return { x: st.x, y: st.y, rot: st.rot, facing: sl.facing }; };
       });
-      yield 0.7;
-      riders.forEach((p) => { p.action = 'armsUp'; p.beakOpen = 1; });
       yield 0.5;
+      riders.forEach((p) => { p.action = 'armsUp'; p.beakOpen = 1; });
+      yield 0.4;
       riders.forEach((p) => { p.action = 'none'; });
-      sl.riding = true; sl.vx = dir * 70; sl.fric = opts.fric ?? 85; sl.brake = 0;
-      let landed = false, impact = 0, wasAir = false;
-      sl.landed = (v) => { landed = true; impact = v; };
-      const t0 = S.sc.t;
-      while (S.sc.t - t0 < 14) {
-        riders.forEach((p) => { p.action = sl.air ? 'armsUp' : (Math.abs(sl.vx) > 220 ? 'armsOut' : 'none'); p.eyeOverride = sl.air ? 'happy' : null; });
-        if (sl.air) wasAir = true;
-        if (opts.onAir && sl.air && sl.vy > -40) { const f = opts.onAir; opts.onAir = null; yield* f(); }
-        if (landed && wasAir) break;
-        if (!sl.air && Math.abs(sl.vx) < 4 && S.sc.t - t0 > 3) break;
-        if (!sl.air && w.rng() < 0.3 && Math.abs(sl.vx) > 150) w.puff(sl.x - dir * 30, sl.y, 1, 6, 0.4, 0.4);
-        yield 0;
-      }
-      riders.forEach((p) => { p.eyeOverride = null; });
-      return impact;
+      sl.riding = true; sl.vx = dir * 70; sl.fric = 85; sl.brake = 0;
     }
     function* stopSled(sl) {
       sl.brake = 1.6;
       yield* S.until(() => Math.abs(sl.vx) < 10 && !sl.air, 8);
       sl.riding = false; sl.vx = 0;
     }
-    function* dismount(p, lane = 14) {
-      p.attach = null; p.rot = 0; p.loco = 'stand'; p.laneT = lane; p.y = p.groundY(); p.action = 'none';
-      yield 0;
+    // up the ladder(s) and onto the top, sled overhead
+    const chain = [L1];
+    function* toTop(p) {
+      p.laneT = 6;
+      yield* S.walk(p, L1.ax, 70);
+      yield* S.climb(p, chain, clamp(S.chainDistForHeight(chain, Hcur - 4), 0, S.chainLen(chain)), 56);
+      p.attach = null; p.loco = 'stand'; p.laneT = p.lane = 0.5; p.ld = null; p.onChain = null;
+      p.x = X(g().xp + 4); p.y = p.groundY();
     }
 
-    // walk up the run to the top
-    yield* S.walk(sledder, X(g().xb + 20), 70);
-    sledder.laneT = 0.5;
-    yield* S.walk(sledder, X(g().xr - 6), 34);
+    // ---- the test run: a small hop ----
+    const sledder = S.spawn({ x: enter, lane: 6, facing: dir });
+    crew.push(sledder);
+    sledder.item = SD.items.sledUp(); sledder.action = 'carryUp';
+    yield* toTop(sledder);
     sledder.item = null; sledder.action = 'plant';
-    const s1 = S.add(new SD.Sled(w, X(g().xp + 14), 0)); s1.facing = dir;
+    const s1 = S.add(new SD.Sled(w, X(g().xp + 16), 0)); s1.facing = dir;
     w.puff(s1.x, s1.y, 3, 8);
-    yield 0.4;
-    shovelers.forEach((p) => { p.face(Math.sign(s1.x - p.x) || 1); p.action = 'lookUp'; });
+    yield 0.3;
+    [cap, ...diggers].forEach((p) => { p.face(Math.sign(s1.x - p.x) || 1); p.action = 'lookUp'; });
     yield* ride([sledder], s1);
-    w.puff(s1.x, s1.y, 6, 12);
+    let wasAir = false;
+    yield* S.until(() => { sledder.action = s1.air ? 'armsUp' : 'none'; if (s1.air) wasAir = true; return (wasAir && !s1.air) || (!s1.air && Math.abs(s1.vx) < 4); }, 12);
+    w.puff(s1.x, s1.y, 5, 10);
     yield* stopSled(s1);
-    yield* dismount(sledder);
-    sledder.action = 'cheer'; shovelers.forEach((p) => { p.action = 'clap'; });
-    yield 1.6;
-    crew.forEach((p) => { p.action = 'none'; });
-    sledder.say('?', 1.5); // bigger?
-    yield 1.2;
+    sledder.attach = null; sledder.rot = 0; sledder.loco = 'stand'; sledder.laneT = 22; sledder.y = sledder.groundY(); sledder.action = 'none';
+    [cap, ...diggers].forEach((p) => { p.action = 'none'; });
+    // ...is that it?
+    yield 0.5; sledder.face(-dir); sledder.action = 'shrug'; sledder.say('?', 1.4);
+    yield 1.2; sledder.action = 'none';
+    cap.action = 'point'; cap.say('!', 1.2); // bigger!
+    yield 1.0; cap.action = 'none';
+    // the little sled is carried clear of where the big run will be
+    s1.dead = true; sledder.item = SD.items.sledUp(); sledder.action = 'carryUp';
+    const clearX = clamp(X(geom(252).xk + 620), S.ax0 + 90, S.ax1 - 90);
+    S.run((function* () { yield* S.walk(sledder, clearX, 80); sledder.face(-dir); sledder.item = null; sledder.action = 'plant'; const sp = S.add(new SD.Sled(w, sledder.x - dir * 34, 24)); sp.facing = dir; yield 0.4; sledder.action = 'none'; })());
 
-    // ---- stage B: mini ladders + block carriers ----
-    const lb = X(xsL - 62), lby = S.ground(lb) + 3;
-    const L1 = S.add(new SD.Ladder(w, lb, lby, X(xsL + 40), lby - 172, 3)); L1.show = 0;
-    const ladGuy = shovelers[0];
-    ladGuy.laneT = 6; // off for the ladder and back along the back, behind anyone standing about
-    yield* S.walk(ladGuy, enter, 140);
-    ladGuy.item = SD.items.ladder(); ladGuy.action = 'carryLadder';
-    yield* S.walk(ladGuy, X(xsL - 100), 70);
-    ladGuy.item = null; ladGuy.action = 'plant';
-    yield* S.tween(0.9, (u) => { L1.show = SD.backOut(u); });
-    ladGuy.action = 'none';
-    const mutex = { o: null };
-    let blocksOn = true;
-    function* blockRun(p, k) {
-      yield k * 1.4;
-      while (blocksOn && Hcur < 158) {
-        yield* S.walk(p, X(xsL - 160 - k * 18), 70);
-        p.face(-dir); p.action = 'plant'; yield 0.7;
-        p.item = SD.items.block(); p.action = 'carryUp';
-        p.face(dir);
-        yield* S.walk(p, L1.ax, 60);
-        while (mutex.o && mutex.o !== p) yield 0;
-        if (!blocksOn || Hcur >= 158) { p.item = null; p.action = 'none'; break; }
-        mutex.o = p;
-        const dT = clamp(S.chainDistForHeight([L1], Hcur - 4), 20, L1.len);
-        yield* S.climb(p, [L1], dT, 60);
-        p.item = null; p.action = 'pass'; p.cyc = 0.8;
-        const [hx, hy] = p.localToWorld(0, -131);
-        S.fling((ctx) => SD.drawBlock(ctx, 28, 18), () => [hx, hy], () => [X(g().xp + 16), w.surfaceY(X(g().xp + 16))], 0.5, 30, () => { Hcur = Math.min(Hcur + 9, 400); w.puff(X(g().xp + 16), w.surfaceY(X(g().xp + 16)), 4, 9); });
-        yield 0.5;
-        p.action = 'none';
-        yield* S.offLadder(p, [L1], 12 + k * 2);
-        mutex.o = null;
-      }
-      p.action = 'none';
-    }
-    shovelOn = true;
-    const helpers = shovelers.slice(1).concat([sledder]);
-    const bCos = helpers.map((p, k) => S.run(blockRun(p, k)));
-    const sh2 = S.run(shovelLoop(ladGuy, xsL + 420, () => Hcur >= 158));
-    yield* S.until(() => Hcur >= 158, 120);
-    blocksOn = false; shovelOn = false;
-    yield bCos; yield sh2;
-
-    // test run 2 — up the ladder with the sled
-    const r2 = helpers[1];
-    s1.dead = true;
-    r2.item = SD.items.sledUp(); r2.action = 'carryUp';
-    crew.forEach((p) => { if (p !== r2) { p.face(Math.sign(X(xsL + 300) - p.x) || 1); } });
-    yield* S.walk(r2, L1.ax, 60);
-    yield* S.climb(r2, [L1], clamp(S.chainDistForHeight([L1], Hcur - 4), 0, L1.len), 48);
-    r2.attach = null; r2.loco = 'stand'; r2.laneT = r2.lane = 0.5; r2.ld = null; r2.onChain = null;
-    r2.x = X(g().xp + 4); r2.y = r2.groundY();
-    r2.item = null; r2.action = 'plant';
-    const s2 = S.add(new SD.Sled(w, X(g().xp + 16), 0)); s2.facing = dir;
-    yield 0.35;
-    crew.forEach((p) => { if (p !== r2) p.action = 'lookUp'; });
-    yield* ride([r2], s2);
-    w.puff(s2.x, s2.y, 8, 14);
-    yield* stopSled(s2);
-    yield* dismount(r2);
-    r2.action = 'cheer'; crew.forEach((p) => { if (p !== r2) p.action = 'clap'; });
-    yield 1.8;
-    crew.forEach((p) => { p.action = 'none'; });
-
-    // ---- stage C: stack a second ladder + bucket brigade ----
+    // ---- bigger: a second ladder on top of the first, and blocks passed up hand to hand ----
     const top1 = L1.point(1);
-    // the second ladder sits in front of the first, overlapping it and lashed on
     const L2 = S.add(new SD.Ladder(w, top1[0], top1[1], X(xsL + 52), top1[1] - 122, 3.4)); L2.show = 0;
     L2.col = '#c9884a'; L2.overlap = 32; L2.stacked = true;
-    const stacker = helpers[0];
-    stacker.item = SD.items.ladder('#c9884a'); stacker.action = 'carryLadder';
-    yield* S.walk(stacker, L1.ax, 60);
-    stacker.item = SD.items.ladderBack(); stacker.action = 'none';
-    yield* S.climb(stacker, [L1], L1.len * 0.93, 46);
-    stacker.item = null; stacker.action = 'armsUp';
-    yield* S.tween(0.9, (u) => { L2.show = SD.backOut(u); });
+    const [low, mid, hero] = diggers;
+    hero.laneT = 6;
+    yield* S.walk(hero, L1.ax, 80);
+    hero.item = SD.items.ladderBack(); hero.action = 'none';
+    yield* S.climb(hero, [L1], L1.len * 0.93, 60);
+    hero.item = null; hero.action = 'armsUp';
+    yield* S.tween(0.8, (u) => { L2.show = SD.backOut(u); });
     w.sparkle(top1[0], top1[1], 4, '#ffffff', 6);
-    stacker.action = 'none';
-    const chain = [L1, L2];
+    hero.action = 'none';
+    chain.push(L2);
     const len1 = L1.len, lenT = len1 + L2.len;
-    // brigade positions
-    const bg = [ladGuy, helpers[2] || shovelers[1], stacker, helpers[1]];
-    const P0 = bg[0];
-    yield* S.walk(P0, L1.ax - dir * 26, 60);
-    P0.face(dir);
-    const climbers = [[bg[1], len1 * 0.42], [bg[2], len1 * 0.93], [bg[3], len1 + L2.len * 0.72]];
-    const ccos = climbers.map(([p, dd], i) => S.run((function* () {
-      if (p.onChain !== L1) { yield* S.walk(p, L1.ax, 60); }
-      yield* S.climb(p, chain, dd, 46);
-      p.action = 'pass';
-    })()));
-    // the remaining crew keeps shoveling
-    shovelOn = true;
-    const extra = crew.filter((p) => !bg.includes(p));
-    const sh3 = extra.map((p, i) => S.run(shovelLoop(p, [xsL + 380, xsL + 450, xsL - 210][i % 3], () => Hcur >= 252)));
-    yield ccos;
-    P0.action = 'pass';
-    const passers = [P0, bg[1], bg[2], bg[3]];
+    const P0 = cap;
+    const posts = [[low, len1 * 0.42], [mid, len1 * 0.93], [hero, len1 + L2.len * 0.72]];
+    P0.laneT = 6;
+    yield [S.run((function* () { yield* S.walk(P0, L1.ax - dir * 26, 70); P0.face(dir); })()),
+      S.run((function* () { yield* S.climb(hero, chain, posts[2][1], 60); })()),
+      S.run((function* () { yield 0.6; mid.laneT = 6; yield* S.walk(mid, L1.ax, 80); yield* S.climb(mid, chain, posts[1][1], 60); })()),
+      S.run((function* () { yield 1.4; low.laneT = 6; yield* S.walk(low, L1.ax, 80); yield* S.climb(low, chain, posts[0][1], 60); })())];
+    const passers = [P0, low, mid, hero];
+    passers.forEach((p) => { p.action = 'pass'; });
     let brigade = true;
     S.run((function* () { while (brigade) { const t = S.sc.t; passers.forEach((p, i) => { p.cyc = (t * 1.1 + i * 0.25) % 1; }); yield 0; } })());
+    const hands = passers.map((p) => () => p.localToWorld(0, -110));
+    const upTheLine = function* (draw, onTop) {
+      const obj = { x: 0, y: 0, lane: 30, alpha: 1, dead: false, update() {}, draw(ctx) { ctx.save(); ctx.translate(this.x, this.y); draw(ctx); ctx.restore(); } };
+      S.add(obj);
+      for (let leg = 0; leg < hands.length - (onTop ? 1 : 0); leg++) {
+        const a = hands[leg], b = leg + 1 < hands.length ? hands[leg + 1] : () => [X(g().xp + 14), w.surfaceY(X(g().xp + 14))];
+        const [x0, y0] = a();
+        yield* S.tween(0.42, (u) => { const [x1, y1] = b(); obj.x = lerp(x0, x1, u); obj.y = lerp(y0, y1, u) - 18 * 4 * u * (1 - u); });
+      }
+      obj.dead = true;
+      return obj;
+    };
     while (Hcur < 252) {
-      // spawn a block that travels up the line hand to hand
-      const hands = passers.map((p) => () => p.localToWorld(0, -110));
-      const legs = hands.length;
-      let leg = 0;
-      const blk = { x: 0, y: 0, lane: 30, alpha: 1, dead: false, update() {}, draw(ctx) { ctx.save(); ctx.translate(this.x, this.y); SD.drawBlock(ctx, 24, 16); ctx.restore(); } };
-      S.add(blk);
-      S.run((function* () {
-        for (leg = 0; leg < legs; leg++) {
-          const a = hands[leg], b = leg + 1 < legs ? hands[leg + 1] : () => [X(g().xp + 14), w.surfaceY(X(g().xp + 14))];
-          const [x0, y0] = a();
-          yield* S.tween(0.5, (u) => { const [x1, y1] = b(); blk.x = lerp(x0, x1, u); blk.y = lerp(y0, y1, u) - 18 * 4 * u * (1 - u); });
-        }
-        blk.dead = true;
-        Hcur = Math.min(Hcur + 7.5, 400);
-        w.puff(blk.x, blk.y, 3, 8);
-      })());
-      yield 0.85;
+      S.run((function* () { const o = yield* upTheLine((ctx) => SD.drawBlock(ctx, 24, 16)); Hcur = Math.min(Hcur + 15, 400); w.puff(o.x, o.y, 3, 8); })());
+      yield 0.7;
     }
-    yield 2.2;
-    brigade = false; shovelOn = false;
-    yield sh3;
-    passers.forEach((p) => { p.action = 'cheer'; });
-    yield 1.4;
-    // climb down (top first)
-    for (const [p] of climbers.slice().reverse()) { yield* S.offLadder(p, chain, 12 + S.r() * 6); p.action = 'none'; }
+    yield 1.6;
+    // last up the line: the sled, to whoever is at the top
+    yield* upTheLine((ctx) => { ctx.rotate(-dir * 1.2); ctx.fillStyle = '#d8343c'; ctx.strokeStyle = '#151b2b'; ctx.lineWidth = 2; ctx.beginPath(); SD.rrect(ctx, -22, -5, 44, 8, 3); ctx.fill(); ctx.stroke(); }, true);
+    brigade = false;
     passers.forEach((p) => { p.action = 'none'; });
-
-    // ---- the big jump ----
-    const hero = sledder;
     hero.item = SD.items.sledUp(); hero.action = 'carryUp';
-    yield* S.walk(hero, L1.ax, 60);
-    const topD = S.chainDistForHeight(chain, Hcur - 3);
-    yield* S.climb(hero, chain, Math.min(topD, lenT), 52);
+
+    // ---- the big one ----
+    yield* S.climb(hero, chain, Math.min(S.chainDistForHeight(chain, Hcur - 3), lenT), 56);
     hero.attach = null; hero.loco = 'stand'; hero.ld = null; hero.onChain = null; hero.laneT = hero.lane = 0.5;
     hero.x = X(g().xp + 4); hero.y = hero.groundY();
     hero.item = null; hero.action = 'plant';
     const s3 = S.add(new SD.Sled(w, X(g().xp + 16), 0)); s3.facing = dir;
     yield 0.4;
-    crew.forEach((p) => { if (p !== hero) { p.action = 'lookUp'; p.face(Math.sign(X(xsL + 500) - p.x) || 1); } });
-    hero.say('!', 1.0);
-    yield 1.0;
-    const impact = yield* ride([hero], s3);
-    // buried head-first!
-    const lx = s3.x + dir * 20;
-    hero.attach = null; hero.loco = 'stand'; hero.laneT = hero.lane = 4;
-    w.puff(lx, w.surfaceY(lx), 16, 22, 1.2, 1.3);
-    w.addSnow(lx + dir * 26, 380, 18);
-    hero.sinkClip = true; hero.rot = dir * PI * 0.92;
-    hero.attach = () => ({ x: lx, y: w.surfaceY(lx) - 12 });
-    hero.loco = 'prone'; hero.kick = 1; hero.p.prone = 0;
-    S.run(stopSled(s3));
-    crew.forEach((p) => { if (p !== hero) p.action = 'flail'; });
+    const watchers = [cap, low, mid, sledder];
+    watchers.forEach((p) => { p.action = 'lookUp'; });
+    sledder.face(-dir);
+    hero.say('!', 0.9);
     yield 0.8;
-    crew.forEach((p) => { if (p !== hero) { p.action = 'none'; p.goTo(lx - dir * (60 + S.r() * 80), 90); } });
-    yield 1.4;
-    // pop out
-    hero.loco = 'stand'; hero.kick = 0;
-    hero.attach = null; hero.sinkClip = false;
-    hero.x = lx; hero.y = hero.groundY();
-    yield* S.tween(0.25, (u) => { hero.rot = lerp(dir * PI * 0.92, 0, u); });
-    hero.jump(-360, 0);
-    w.puff(lx, w.surfaceY(lx), 10, 14);
-    hero.say('heart', 1.6);
-    yield* S.until(() => !hero.air, 2);
-    hero.action = 'cheer'; crew.forEach((p) => { if (p !== hero) { p.face(Math.sign(hero.x - p.x) || 1); p.action = 'cheer'; } });
-    yield 2.2;
-    crew.forEach((p) => { p.action = 'none'; });
-
-    // ---- encore: three on a toboggan ----
-    const tob = S.add(new SD.Sled(w, X(xsL - 150), 2, true)); tob.facing = dir;
-    const trio = [helpers[0], helpers[1], shovelers[0]];
-    const tobHeld = { u: 0 };
-    tob.follow = false;
-    tob.held = () => { const [bx, by] = S.chainPoint(chain, lenT * tobHeld.u); return { x: bx - dir * 16, y: by + 8, ang: -dir * 1.2 * (tobHeld.u > 0 && tobHeld.u < 1 ? 1 : 0) }; };
-    tob.alpha = 0;
-    // they climb up first
-    for (const [i, p] of trio.entries()) {
-      S.run((function* () {
-        yield i * 0.9;
-        yield* S.walk(p, L1.ax, 70);
-        yield* S.climb(p, chain, Math.min(S.chainDistForHeight(chain, Hcur - 3), lenT), 55);
-        p.attach = null; p.loco = 'stand'; p.ld = null; p.onChain = null; p.laneT = p.lane = 0.5 + i * 0.01;
-        p.x = X(g().xp + 2 + i * 8); p.y = p.groundY();
-      })());
+    yield* ride([hero], s3);
+    yield* S.until(() => { if (!s3.air && w.rng() < 0.3 && Math.abs(s3.vx) > 150) w.puff(s3.x - dir * 30, s3.y, 1, 6, 0.4, 0.4); hero.action = Math.abs(s3.vx) > 220 ? 'armsOut' : 'none'; return s3.air; }, 14);
+    // off the kicker... and up. And up. Out of the top of the picture.
+    s3.riding = false; s3.follow = false;
+    const fx0 = s3.x, fy0 = s3.y, fxl = clamp(fx0 + dir * 190, S.ax0 + 160, S.ax1 - 160);
+    const fl = { x: fx0, y: fy0, ang: -dir * 0.9 };
+    s3.held = () => fl;
+    hero.action = 'armsUp'; hero.eyeOverride = 'happy';
+    w.puff(fx0, fy0, 6, 12, 1, 0.6);
+    yield* S.tween(0.85, (u) => { fl.x = lerp(fx0, lerp(fx0, fxl, 0.7), u); fl.y = lerp(fy0, -260, SD.easeOut(u)); });
+    watchers.forEach((p) => { p.face(Math.sign(fxl - p.x) || 1); });
+    yield 0.5;
+    w.sparkle(lerp(fx0, fxl, 0.85), 26, 3, '#ffffff', 9); // a twinkle, a long way up
+    sledder.say('?', 1.2);
+    yield 1.5;
+    // straight back down, nose first, and clean through the snow
+    hero.action = 'flail'; hero.eyeOverride = 'wide';
+    fl.x = fxl; fl.ang = dir * PI / 2;
+    const gyl = w.surfaceY(fxl);
+    yield* S.tween(0.42, (u) => { fl.y = lerp(-260, gyl + 90, u * u); if (fl.y > gyl - 24) hero.hidden = true; });
+    hero.hidden = true; hero.attach = null; hero.sinkClip = false; hero.eyeOverride = null; hero.rot = 0;
+    s3.dead = true;
+    w.puff(fxl, gyl, 22, 24, 1.6, 1.5);
+    w.addSnow(fxl, -Math.min(60, w.depthAt(fxl) * 0.7), 24);
+    w.addSnow(fxl - 44, 34, 14); w.addSnow(fxl + 44, 34, 14);
+    watchers.forEach((p) => { if (!p.attach) { p.action = 'startle'; p.jump(-140, 0); } else p.action = 'flail'; });
+    yield 1.1;
+    // the ones on the ladder go over the top and down the ramp on their bellies, to see
+    watchers.forEach((p) => { p.action = 'none'; });
+    function* overTop(p, i) {
+      if (!p.onChain) { p.laneT = 6; yield* S.walk(p, L1.ax, 90); }
+      yield* S.climb(p, chain, Math.min(S.chainDistForHeight(chain, Hcur - 3), lenT), 80);
+      p.attach = null; p.loco = 'stand'; p.ld = null; p.onChain = null; p.laneT = p.lane = 1 + i; p.x = X(g().xp + 6); p.y = p.groundY();
+      p.face(dir); yield 0.25;
+      const x0 = p.x, x1 = X(g().xb - 20 - i * 60);
+      let cur = x0, last = x0;
+      p.loco = 'prone'; p.kick = 0.4; p.action = 'none';
+      p.attach = () => ({ x: cur, y: w.surfaceY(cur) + p.lane, rot: Math.atan(w.slopeAt(cur)) });
+      yield* S.tween(1.7, (u) => { cur = lerp(x0, x1, SD.easeIn(u) * 0.55 + u * 0.45); p.vx = (cur - last) / Math.max(S.dt, 1e-3); last = cur; p.laneT = p.lane = lerp(1 + i, 12 + i * 7, u); if (((u * 9) | 0) !== (((u - 0.02) * 9) | 0)) w.puff(cur - dir * 20, w.surfaceY(cur), 1, 6, 0.4, 0.4); });
+      p.attach = null; p.vx = 0; p.rot = 0; p.loco = 'stand'; p.kick = 0; p.x = cur; p.y = p.groundY(); w.puff(p.x, p.y, 4, 8);
+      p.face(dir); p.action = 'inspect';
     }
-    yield 4.5;
-    tob.alpha = 1;
-    yield* S.tween(2.6, (u) => { tobHeld.u = SD.easeInOut(u); });
-    tob.held = null; tob.x = X(g().xp + 40); tob.lane = 0; tob.follow = true;
-    yield 0.3;
-    yield* S.until(() => trio.every((p) => p.loco === 'stand' && !p.attach), 6);
-    crew.forEach((p) => { if (!trio.includes(p)) p.action = 'lookUp'; });
-    const ejected = [];
-    yield* ride(trio, tob, {
-      onAir: function* () {
-        // everybody flies off separately!
-        trio.forEach((p, i) => {
-          p.attach = null; p.loco = 'air'; p.action = 'flail'; p.rot = 0;
-          p.jump(tob.vy - 90 - i * 60, tob.vx * (0.7 + i * 0.18));
-          p.onLand = (q) => { w.puff(q.x, q.y, 8, 14); q.dizzy = 2.4; q.action = 'none'; q.rot = 0; q.loco = 'stand'; };
-          ejected.push(p);
-        });
-        S.run((function* () { while (ejected.some((p) => p.air)) { ejected.forEach((p, i) => { if (p.air) p.rot += (i % 2 ? -1 : 1) * 0.12; }); yield 0; } ejected.forEach((p) => { p.rot = 0; }); })());
-        yield 0;
-      },
-    });
-    S.run(stopSled(tob));
-    yield* S.until(() => trio.every((p) => !p.air), 5);
-    trio.forEach((p) => { p.attach = null; p.loco = 'stand'; p.laneT = 12 + S.r() * 6; p.rot = 0; });
-    yield 2.4;
-    trio.forEach((p) => { p.action = 'cheer'; });
-    crew.forEach((p) => { if (!trio.includes(p)) p.action = 'clap'; });
-    yield 2.0;
+    const gather = [mid, low, cap].map((p, i) => S.run((function* () { yield i * 0.9; yield* overTop(p, i); })()));
+    const rim = [[cap], [sledder], [low], [mid]];
+    sledder.laneT = 18; yield* S.walk(sledder, fxl + dir * 96, 80); sledder.face(-dir); sledder.action = 'inspect';
+    yield 0.8; sledder.say('?', 1.2);
+    yield gather;
+    yield 0.6;
+    // he's tunnelling: the snow humps along, and up he comes somewhere else entirely
+    const outX = clamp(fxl + dir * 250, S.ax0 + 120, S.ax1 - 120);
+    yield* S.tween(1.5, (u) => { const x = lerp(fxl, outX, u); if (((u * 14) | 0) !== (((u - 0.012) * 14) | 0)) { w.puff(x, w.surfaceY(x), 2, 7, 0.5, 0.5); w.addSnow(x, 5, 9); } });
+    hero.hidden = false; hero.loco = 'stand'; hero.x = outX; hero.lane = hero.laneT = 20; hero.y = hero.groundY(); hero.snowCap = 1;
+    hero.jump(-400, 0); w.puff(outX, w.surfaceY(outX), 12, 15, 1.2, 1.2);
+    rim.forEach(([p]) => { p.face(Math.sign(outX - p.x) || 1); p.action = 'startle'; });
+    yield* S.until(() => !hero.air, 2.5);
+    hero.dizzy = 1.6; hero.say('heart', 1.6);
+    S.run(S.tween(2.5, (u) => { hero.snowCap = 1 - u; }));
+    yield 0.9;
+    // ...and then the sled comes down
+    const sx = clamp(outX - dir * 80, S.ax0 + 60, S.ax1 - 60), s4 = S.add(new SD.Sled(w, sx, 18)); s4.facing = dir; s4.follow = false;
+    const f4 = { x: sx, y: -200, ang: 2 };
+    s4.held = () => f4;
+    yield* S.tween(0.5, (u) => { f4.y = lerp(-200, w.surfaceY(sx) + 18, u * u); f4.ang = 2 + u * 6; });
+    f4.ang = dir * 0.5; w.puff(sx, w.surfaceY(sx), 8, 12, 1, 0.8);
+    hero.action = 'startle'; hero.jump(-160, 0);
+    yield 0.9;
+    S.finale(); hero.action = 'cheer'; rim.forEach(([p]) => { p.action = 'cheer'; });
+    yield 2.6;
     shaping = false;
-    crew.forEach((p) => { p.action = 'none'; });
-    yield 1.0;
-    yield* S.exitAll(crew, 62);
+    crew.forEach((p) => { p.action = 'wave'; });
+    yield 1.2;
+    // home the far way: nobody climbs back over the mound to leave
+    const far = dir > 0 ? S.offR : S.offL;
+    yield crew.slice().sort((a, b) => (b.x - a.x) * dir).map((p, i) => S.run((function* () { p.action = 'none'; p.laneT = 12 + (i % 4) * 5; yield i * 0.3; yield* S.walk(p, far, 70); p.dead = true; })()));
   }
 
   // =====================================================================
@@ -908,7 +826,7 @@
     yield* S.until(() => Math.abs(slip.vx) < 25, 9);
     slip.vx = 0; slip.loco = 'stand'; slip.kick = 0; slip.eyeOverride = null;
     slip.say('heart', 1.4);
-    slip.action = 'cheer'; yield 1.2; slip.action = 'none';
+    S.finale(); slip.action = 'cheer'; yield 1.2; slip.action = 'none';
 
     // ---- gliding helpers ----
     const bounds = [S.ax0 + 120, S.ax1 - 120];

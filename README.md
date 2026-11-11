@@ -30,7 +30,7 @@ beanie penguins.
 ## Scenes
 
 Deck the Tree, Candy Parade, The Big Ramp, Ice Day, Igloo Contest, Ice Fishing, Blizzard, Flying Lessons,
-Giant Snowman, First Reindeer, Hockey Night, Gingerbread Bake-Off, The Long Table, Nativity Play, Parkour (runs along your open windows),
+Giant Snowman, First Reindeer, Hockey Night, Gingerbread Bake-Off, The Long Table, Nativity Play, The Trebuchet, The Christmas Card, Santa's Grotto, The Countdown, Santa's Workshop, Christmas Biscuits, Carols round the Tree, Decorating the Town, Parkour (runs along your open windows),
 and with two screens side by side:
 Snowball Fight, Zipline, Tug-of-War.
 
@@ -64,8 +64,21 @@ Work happens on `dev`. Every push to `main` runs `tools/secret-scan.sh` and buil
 (`.github/workflows/build.yml`); when `appVersion` in `app/main.go` is new, that push publishes the release,
 with its `CHANGELOG.md` section as the notes the update prompt shows.
 
-Before a release, run `node tools/depth-check.js` (needs Playwright). It plays every scene on three seeds
-and flags penguins standing inside each other, walking through props, or standing on the join between two
-screens, with a picture of each.
+## Staging a scene
+
+Lanes are depth: a bigger lane is nearer the glass (0–5 set, 6–16 back row, 17–27 middle, 28–38 front).
+
+1. **Plan the blocking first.** A scene starts with `S.marks({ name: [x from centre, lane], … })` and a
+   one-line depth plan in a comment. `marks()` checks the plan itself and reports two places that would put
+   penguins inside each other or hide a face.
+2. **Move safely.** `S.to(p, mark)`, `S.route()` and `S.toLane()` change depth first and then walk across.
+   Set pieces are `SD.set.Draw` props carried on with `SD.set.carryIn`.
+3. **Look from above.** `node tools/stage-map.js scene [seed]` draws the whole scene as a plan, one strip a
+   minute: where everyone walked and stood.
+4. **Gate.** `node tools/depth-check.js [scene]` plays every scene on three seeds and flags penguins inside
+   each other, walking through props, hidden behind one another, half off the screen, or on the join between
+   two screens, with a picture of each. Run it before a release.
+5. **Replay a report.** The full-screen preview stamps scene, seed and time in the corner;
+   `node tools/replay.js scene seed seconds` gives that exact frame and where everyone is.
 
 The penguins, reindeer and scenes are original artwork drawn in code (`app/web/js/`).

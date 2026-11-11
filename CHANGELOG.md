@@ -3,7 +3,13 @@
 Each version's list becomes its release notes and is shown in the update prompt. Add "(critical)"
 after a version number to have installed copies update without asking.
 
-## 1.5.2
+## 1.6.0
+- Eight new scenes: The Trebuchet (they find the glass), The Christmas Card, Santa's Grotto, The Countdown to Christmas, Santa's Workshop, Christmas Biscuits, Carols round the Tree, and Decorating the Town
+- The Big Ramp is rebuilt: no more waiting or walking over the mound, and the big ramp gets used. Off the kicker, out of the top of the picture, and straight down through the snow
+- Belly-slides redrawn: the body lies flat and the head rides up, looking where it's going
+- Celebrations are rarer and varied: a proper cheer for the big moments, a nod or a few claps for the small ones, and no two penguins cheer the same way
+- Penguins no longer idle with their face behind someone, half off the edge of the screen, or across the join between screens
+- The full-screen preview shows scene, seed and time in the corner, so a screenshot can be replayed exactly
 - New scene: The Long Table. The crew sets up a hall after Leonardo's painting, each one brings something to share, and for a moment the table becomes the painting
 - New scene: Nativity Play. The crew builds the stable, then puts on the play: shepherds and a wandering sheep, an angel on a hay bale, and three kings
 - Giant Snowman: the two rollers push the ball side by side, both with their flippers on the snow

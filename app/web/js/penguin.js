@@ -272,6 +272,9 @@
       P.fFx = 0; P.fFy = 0; P.fBx = 0; P.fBy = 0;
       P.aF = 0.22 + Math.sin(t * 1.6 + this.id) * 0.03; P.aB = -0.22 - Math.sin(t * 1.6 + this.id) * 0.03;
       let eyes = 'open';
+      const celNow = this.action === 'cheer' || this.action === 'clap' ? this.action : null;
+      if (celNow && this._celA !== celNow) celebrate(this, celNow);
+      this._celA = celNow; if (celNow) this._celT += dt;
       const s = Math.sin(ph);
 
       const gait = this.stepping ? 'walk' : this.loco;
@@ -311,15 +314,15 @@
           P.aF = -0.9 + Math.sin(this.cyc) * 0.75; P.aB = -1.0 + Math.sin(this.cyc) * 0.75;
           break;
         case 'prone': {
-          // tobogganing: flat on the belly with the nose up, flippers held back along the sides like
-          // a swimmer's, feet paddling behind to push
+          // tobogganing: flat on the belly, head up, flippers held out and back for balance (a little
+          // steering flick now and then), feet pushing behind
           const sp = Math.min(1, Math.abs(this.vx || 0) / 140), st = this.t * (6 + sp * 2) + this.id;
           const kick = this.kick || 0;
-          P.prone = 1; P.pitch = -0.08 + Math.sin(st * 0.5) * 0.025;
-          P.aF = 0.22 + Math.sin(st * 1.7) * 0.03 * sp; P.aB = -0.06;
-          P.fFx = -2 + Math.sin(st) * 4 * kick; P.fBx = 2 - Math.sin(st) * 4 * kick;
-          P.fFy = -3 - Math.max(0, Math.sin(st)) * 7 * kick; P.fBy = -3 - Math.max(0, -Math.sin(st)) * 7 * kick;
-          P.sq = 1; P.bob = 0;
+          P.prone = 1; P.pitch = Math.sin(st * 0.5) * 0.02;
+          P.aF = 0.5 + Math.max(0, Math.sin(st * 0.9)) * 0.22 * sp; P.aB = -0.2;
+          P.fFx = -2 + Math.sin(st) * 5 * kick; P.fBx = 2 - Math.sin(st) * 5 * kick;
+          P.fFy = -3 - Math.max(0, Math.sin(st)) * 8 * kick; P.fBy = -3 - Math.max(0, -Math.sin(st)) * 8 * kick;
+          P.sq = 1; P.bob = 0; eyes = sp > 0.5 ? 'happy' : eyes;
           break;
         }
         case 'scrabble':
@@ -383,9 +386,25 @@
         case 'presentCane': P.aF = -1.05; P.aB = -0.25; P.lean = -0.04; break;
         case 'push': P.lean = 0.3; P.aF = -1.35; P.aB = -1.5; break;
         case 'cheer':
-          P.bob += -Math.abs(Math.sin(t * 7.5 + this.id)) * 10; P.aF = PI - 0.35 + Math.sin(t * 15) * 0.25; P.aB = -(PI - 0.35) - Math.sin(t * 15 + 1) * 0.25;
-          P.beak = 0.8; eyes = 'happy'; P.sq = 1 + Math.sin(t * 15) * 0.03; break;
-        case 'clap': { const k = Math.sin(t * 13 + this.id); P.aF = -1.05 + k * 0.3; P.aB = -1.15 - k * 0.3; eyes = 'happy'; P.beak = 0.4; P.bob += -Math.abs(k) * 1.5; break; }
+        case 'clap': {
+          // Celebrating. Not every little success gets the full treatment: the first one in a scene
+          // does, and after that only a moment the whole crew joins in, or one a good while after
+          // the last. In between it's a nod, a smile, a couple of claps. And no two penguins (or two
+          // occasions) celebrate quite the same way. See celebrate() below.
+          const st = this._cel, ct = this._celT, k = Math.sin(t * 13 + this.id), hop = -Math.abs(Math.sin(t * 7.5 + this.id));
+          eyes = 'happy';
+          if (st === 0) { P.bob += hop * 10; P.aF = PI - 0.35 + Math.sin(t * 15) * 0.25; P.aB = -(PI - 0.35) - Math.sin(t * 15 + 1) * 0.25; P.beak = 0.8; P.sq = 1 + Math.sin(t * 15) * 0.03; } // both flippers up, bouncing
+          else if (st === 1) { P.bob += hop * 7; P.aF = PI - 0.5 + Math.sin(t * 11) * 0.5; P.aB = -0.5; P.beak = 0.7; P.lean = -0.06; }                // one flipper punching the air
+          else if (st === 2) { P.roll += Math.sin(t * 6 + this.id) * 0.15; P.aF = 1.5; P.aB = -1.5; P.bob += hop * 4; P.beak = 0.6; }                     // a happy side-to-side dance
+          else if (st === 3) { P.aF = PI - 0.95 + k * 0.3; P.aB = -(PI - 0.95) + k * 0.3; P.bob += -Math.abs(k) * 3; P.beak = 0.6; }                       // clapping overhead
+          else if (st === 4) { P.bob += hop * 12; P.aF = 1.1 + Math.sin(t * 20) * 0.5; P.aB = -1.1 - Math.sin(t * 20) * 0.5; P.beak = 0.9; }                // flapping jumps
+          else if (st === 5) { P.aF = -1.05 + k * 0.3; P.aB = -1.15 - k * 0.3; P.beak = 0.4; P.bob += -Math.abs(k) * 1.5; }                               // clapping
+          else if (st === 10) { P.lean = 0.07 * Math.max(0, Math.sin(ct * 7)) * Math.max(0, 1 - ct / 1.6); P.beak = 0.2; }                                // a nod and a smile
+          else if (st === 11) { const e = Math.max(0, 1 - ct / 1.8); P.aF = lerp(P.aF, -1.05 + k * 0.25, e); P.aB = lerp(P.aB, -1.15 - k * 0.25, e); P.beak = 0.25 * e; } // a few soft claps
+          else if (st === 12) { const e = SD.smooth(clamp(Math.min(ct / 0.2, (1.3 - ct) / 0.3), 0, 1)); P.aF = lerp(P.aF, PI - 0.8, e); P.beak = 0.3 * e; P.bob += -2 * e; } // a flipper up, then down
+          else { const e = Math.max(0, 1 - ct / 0.5); P.bob += -Math.sin(Math.min(1, ct / 0.5) * PI) * 6; P.beak = 0.4 * e; }                              // one little hop
+          break;
+        }
         case 'wave': P.aF = PI - 0.6 + Math.sin(t * 10) * 0.35; P.beak = 0.3; eyes = 'happy'; break;
         case 'drum': { const a = Math.max(0, Math.sin(t * 2 * PI * 2)), b = Math.max(0, -Math.sin(t * 2 * PI * 2)); P.aF = -0.7 - a * 0.7; P.aB = -0.8 - b * 0.7; break; }
         case 'sway': P.roll += Math.sin(t * 2.4 + this.id * 0.4) * 0.12; P.beak = Math.max(0, Math.sin(t * 4.8 + this.id)) * 0.6; eyes = 'happy'; P.aF = 0.5 + Math.sin(t * 2.4) * 0.2; P.aB = -0.5 + Math.sin(t * 2.4) * 0.2; break;
@@ -452,6 +471,8 @@
         case 'pant': P.crouch = 0.25; P.lean = 0.3; P.aF = -0.45; P.aB = -0.55; P.beak = 0.5 + Math.sin(t * 12) * 0.3; eyes = 'closed'; P.bob += Math.sin(t * 12) * 1.2; break;
         case 'boom': P.aF = -2.45; P.aB = -2.25; P.lean = -0.04; break;
         case 'present': P.aF = -1.25; P.aB = -1.35; P.beak = 0.3; eyes = 'happy'; break;
+        // carols: head back, beak wide, eyes shut, swaying together (everyone shares the same beat)
+        case 'sing': { const bt = this.world.t * 2.2; P.lean = -0.16; P.roll += Math.sin(bt) * 0.07; P.beak = 0.75 + 0.25 * Math.sin(bt * 2 + this.id); P.aF = 0.5; P.aB = -0.5; P.bob = Math.max(0, Math.sin(bt * 2)) * 1.5; eyes = 'closed'; break; }
         // the nativity and the long table
         case 'kneel': P.crouch = 0.75; P.fFx = 12; P.fBx = 14; P.fFy = -2; P.fBy = -2; P.aF = -1.0; P.aB = -1.1; P.lean = 0.08; break;
         case 'pray': P.aF = -1.32; P.aB = -1.42; P.lean = 0.06; eyes = 'closed'; P.beak = 0; break;
@@ -537,10 +558,6 @@
       if (this.sinkClip) {
         const sy = this.world.surfaceY(this.x) + this.lane * 0.3;
         ctx.beginPath(); ctx.rect(this.x - 200, sy - 600, 400, 600); ctx.clip();
-      } else if (p.prone > 0.5 && !this.air && !this._partOnly) {
-        // sliding: whatever is below the snow line stays hidden
-        const sy = this.world.surfaceY(this.x) + this.lane + 3;
-        ctx.beginPath(); ctx.rect(this.x - 300, sy - 600, 600, 600); ctx.clip();
       }
       ctx.globalAlpha = this.alpha;
       ctx.translate(this.x, this.y + p.bob);
@@ -549,13 +566,28 @@
       if (this.spin) sx *= Math.cos(this.spin);
       ctx.rotate((p.lean + p.roll) * dir + this.rot);
       ctx.scale(sx * s * this.K.kx / Math.sqrt(p.sq), s * p.sq * this.K.ky);
-      // prone rotation around belly center
-      if (p.prone > 0.001) {
-        ctx.translate(0, 5 * p.prone * (this.air ? 0 : 1)); // the belly sinks into the snow a little
-        ctx.translate(0, -34); ctx.rotate(p.prone * 1.5 + p.pitch); ctx.translate(0, 34);
-      }
       const cr = p.crouch * 12;
-      this._drawBody(ctx, cr);
+      if (p.prone > 0.001) {
+        // On the belly. A penguin tobogganing isn't a standing penguin tipped over: the body lies
+        // flat along the snow and the neck bends so the head rides up, looking where it's going.
+        // So the figure is drawn in two parts about the neck: the body flat, the head lifted.
+        ctx.translate(0, 2 * p.prone * (this.air ? 0 : 1)); // the belly sinks into the snow a little
+        ctx.translate(0, -34); ctx.rotate(p.prone * 1.56 + p.pitch); ctx.translate(0, 34);
+        if (this._partOnly) this._drawBody(ctx, cr);
+        else {
+          const NY = -63 + cr, up = (1.36 + Math.sin(this.t * 3.1 + this.id) * 0.04) * p.prone;
+          // the body stretches out long behind the neck
+          ctx.save(); ctx.translate(0, NY); ctx.scale(1 - 0.2 * p.prone, 1 + 0.4 * p.prone); ctx.translate(0, -NY); ctx.beginPath(); ctx.rect(-300, NY, 600, 400); ctx.clip(); this._drawBody(ctx, cr); ctx.restore();
+          // the throat, opened by the bend
+          const kc = KCOL[this.kind] || KCOL.crew;
+          ctx.fillStyle = this.kind === 'pip' || this.darkFace ? kc.back : CREAM; ctx.strokeStyle = INK; ctx.lineWidth = 2.6;
+          ctx.beginPath(); ctx.moveTo(-8, NY); ctx.arc(-8, NY, 34, 0.1, -up - 0.1, true); ctx.closePath(); ctx.fill();
+          ctx.beginPath(); ctx.arc(-8, NY, 34, 0, -up, true); ctx.stroke();
+          // the neck bends at the back of the shoulders, so the whole head clears the snow
+          ctx.translate(-8, NY); ctx.rotate(-up); ctx.translate(8, -NY);
+          ctx.beginPath(); ctx.rect(-300, NY - 400, 600, 400.5); ctx.clip(); this._drawBody(ctx, cr);
+        }
+      } else this._drawBody(ctx, cr);
       ctx.restore();
       if (p.prone > 0.5 && !this._partOnly && !this.air) this._snowLip(ctx);
 
@@ -1010,7 +1042,7 @@
       ctx.save();
       ctx.globalAlpha = this.alpha;
       ctx.translate(this.x, gy); ctx.scale(f * s, s);
-      const front = 50, back = -60, hf = 9 + v * 6, hb = 5.5;
+      const front = 44, back = -66, hf = 5 + v * 4, hb = 4.5;
       const edge = () => {
         ctx.moveTo(back, 1);
         ctx.bezierCurveTo(back + 18, -hb, front - 50, -hb - 1, front - 18, -hf * 0.75);
@@ -1260,7 +1292,14 @@
       ctx.globalAlpha = Math.min(1, (1 - u) * 4) * this.alpha;
       ctx.translate(hx + this.facing * 8 * this.size, hy - 18 * this.size);
       ctx.scale(s, s);
-      if (b.text === '!') {
+      if (typeof b.text === 'function') {
+        // a picture in a speech bubble: say((ctx) => draw…), drawn in a box about 30 across
+        ctx.fillStyle = '#ffffff'; ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+        ctx.beginPath(); SD.rrect(ctx, -23, -54, 46, 42, 13); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-6, -12.5); ctx.lineTo(-1, -1); ctx.lineTo(6, -12.5); ctx.fill(); ctx.stroke();
+        ctx.fillRect(-7, -15.5, 14, 4);
+        ctx.translate(0, -33); b.text(ctx, b.t);
+      } else if (b.text === '!') {
         ctx.fillStyle = '#ffd43b'; ctx.strokeStyle = INK; ctx.lineWidth = 2.4;
         ctx.beginPath(); ctx.moveTo(-5, -30); ctx.lineTo(5, -30); ctx.lineTo(2.5, -7); ctx.lineTo(-2.5, -7); ctx.closePath(); ctx.fill(); ctx.stroke();
         ctx.beginPath(); ctx.arc(0, 0, 4, 0, TAU); ctx.fill(); ctx.stroke();
@@ -1304,6 +1343,25 @@
 
   SD.Penguin = Penguin;
 
+  // how a penguin celebrates this time (see the 'cheer' pose). One "occasion" is everyone who starts
+  // within about a second of each other.
+  function celebrate(p, kind) {
+    const w = p.world, c = w.celeb || (w.celeb = { t0: -1e9, lastFull: -1e9, n: 0, full: false });
+    if (w.t - c.t0 > 1.2) {
+      const cast = w.actors.filter((a) => a instanceof Penguin && !a.dead && !a.hidden);
+      const joining = cast.filter((a) => a.action === 'cheer' || a.action === 'clap').length;
+      const everyone = cast.length > 0 && joining >= Math.max(2, cast.length * 0.6);
+      c.n++; c.t0 = w.t;
+      c.full = c.forceUntil > w.t || w.t - c.lastFull > (everyone ? 22 : 48);
+      if (c.full) c.lastFull = w.t;
+    }
+    const pick = (p.id * 7 + c.n * 5) % 20;
+    p._celT = 0;
+    if (c.full) p._cel = kind === 'clap' ? [5, 3, 5, 2][pick % 4] : [0, 1, 2, 4, 0, 3, 1][pick % 7];
+    else p._cel = [10, 11, 12, 13, 10, 11][pick % 6];
+  }
+  SD.finale = (world, secs = 4) => { (world.celeb || (world.celeb = { t0: -1e9, lastFull: -1e9, n: 0, full: false })).forceUntil = world.t + secs; };
+
   // Personal space: penguins standing about at much the same depth shuffle apart instead of standing
   // inside each other. Huddles and hugs opt out (p.snug, or the 'hug' action); anyone walking, carried,
   // sitting, climbing or up on a ledge is left alone.
@@ -1336,6 +1394,31 @@
         a.dodge = 8; a.dodgeT = 0.9; // pass in front of them, nearer the viewer
       }
     }
+    // nobody idles with their face behind someone standing nearer the glass, half off the side of the
+    // screen, or across the join between two screens: they sidle clear (slowly, it reads as a shuffle)
+    const idle = (p) => !p.item && !p.item2 && !p.using && p.loco === 'stand';
+    for (const a of free) {
+      // someone busy at their work stays put: whoever idles in front of their face moves instead
+      if (!idle(a)) {
+        for (const b of free) {
+          const dl = b.lane - a.lane, need = 17 * (a.size + b.size) / 2 / 0.74, dx = b.x - a.x;
+          if (b !== a && idle(b) && dl > 6 && dl < 24 * b.size / 0.74 && Math.abs(dx) < need) b.x += (dx > 0 || (dx === 0 && b.id > a.id) ? 1 : -1) * 26 * dt;
+        }
+        continue;
+      }
+      const half = 30 * a.size * a.K.kx, scr = a.world.screens;
+      if (scr && scr.length) {
+        const L = scr[0].x0, R = scr[scr.length - 1].x1;
+        if (a.x > L - half && a.x < L + half) a.x += 40 * dt;
+        else if (a.x < R + half && a.x > R - half) a.x -= 40 * dt;
+        for (let k = 1; k < scr.length; k++) { const j = scr[k].x0, d = a.x - j; if (Math.abs(d) < half) a.x += (d >= 0 ? 1 : -1) * 40 * dt; }
+      }
+      for (const b of free) {
+        if (b === a) continue;
+        const dl = b.lane - a.lane, need = 17 * (a.size + b.size) / 2 / 0.74, dx = a.x - b.x;
+        if (dl > 6 && dl < 24 * b.size / 0.74 && Math.abs(dx) < need) a.x += (dx > 0 || (dx === 0 && a.id > b.id) ? 1 : -1) * 26 * dt;
+      }
+    }
     free.sort((a, b) => a.x - b.x || a.id - b.id);
     for (let i = 0; i < free.length; i++) {
       const a = free[i];
@@ -1345,7 +1428,7 @@
         const dx = b.x - a.x;
         if (dx >= min) break;
         if (Math.abs(a.lane - b.lane) > 6) continue;
-        const step = Math.min(min - dx, (a.loco === 'glide' || b.loco === 'glide' ? 140 : 50) * dt) / 2; // skaters are quicker to make room
+        const step = Math.min(min - dx, (a.loco === 'glide' || b.loco === 'glide' ? 140 : 72) * dt) / 2; // skaters are quicker to make room
         a.x -= step; b.x += step;
       }
     }

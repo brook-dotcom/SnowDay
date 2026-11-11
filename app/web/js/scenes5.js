@@ -1156,7 +1156,7 @@
     host.item = null; host.action = 'clap';
     const champ = winners[0];
     champ.item = SD.items.trophy(); champ.action = 'armsUp';
-    winners.slice(1).forEach((p) => { p.action = 'cheer'; });
+    S.finale(); winners.slice(1).forEach((p) => { p.action = 'cheer'; });
     run((function* () { for (let k = 0; k < 40; k++) { w.confetti(cx + (S.r() - 0.5) * BKW * 0.9, bk.y - BKH + 10, 2, 50); yield 0.05; } })());
     cons.forEach((p) => { if (!winners.includes(p)) p.action = 'clap'; });
     chefs.forEach((J) => { J.action = 'clap'; });

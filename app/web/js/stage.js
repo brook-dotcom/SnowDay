@@ -48,6 +48,44 @@
     edgeFar(x) { return x - this.offL < this.offR - x ? this.offR : this.offL; }
     side(dir) { return dir < 0 ? this.offL : this.offR; }
 
+    // ---------------------------------------------------------------------------------------
+    // BLOCKING. A scene says where everyone stands before anyone moves:
+    //   const M = S.marks({ santa: [0, 12], queue1: [-120, 20], ... });   // [x from centre, lane]
+    //   yield* S.to(p, M.queue1);
+    // marks() checks the plan itself: two marks that would put penguins inside each other, or hide
+    // one's face behind another, are reported at once (tools/depth-check.js prints them), so a bad
+    // layout is caught before a single frame is drawn. Lanes are depth: bigger is nearer the glass.
+    // Convention: 0–5 backdrop and set · 6–16 back row · 17–27 middle · 28–38 front · 40+ foreground.
+    marks(def, opt = {}) {
+      const cx = opt.cx ?? this.cx, size = opt.size ?? 0.74, out = {}, list = [];
+      for (const k of Object.keys(def)) {
+        const d = def[k], m = { name: k, x: cx + d[0], lane: d[1], free: !!d[2] }; // third entry true: passing place, not checked
+        out[k] = m; if (!m.free) list.push(m);
+      }
+      const half = 30 * size;
+      for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+        const a = list[i], b = list[j], dx = Math.abs(a.x - b.x), dl = Math.abs(a.lane - b.lane);
+        let why = null;
+        if (dl <= 4 && dx < 0.62 * 2 * half) why = 'inside each other';
+        else if (dl > 4 && dl < 25 * size / 0.74 && dx < 0.5 * half) why = 'one hides the other';
+        if (why) (SD.layoutWarnings = SD.layoutWarnings || []).push(`${opt.scene || 'scene'}: marks ${a.name} and ${b.name} ${why}`);
+      }
+      return out;
+    }
+    // n marks in a row; odd rows of a choir pass shift = half a gap so faces show between shoulders
+    row(n, x0, gap, lane, shift = 0) { return Array.from({ length: n }, (_, i) => [x0 + (i - (n - 1) / 2) * gap + shift, lane]); }
+    // moving safely: change depth first, standing where you are, then walk across in that lane
+    *toLane(p, lane) { p.laneT = lane; yield* this.until(() => Math.abs(p.lane - lane) < 1.2, 3); }
+    *go(p, x, lane, sp = 62) { if (lane != null) p.laneT = lane; yield* this.walk(p, x, sp); }
+    *route(p, x, lane, sp = 62) { yield* this.toLane(p, lane); yield* this.go(p, x, lane, sp); }
+    *to(p, m, sp = 62, via) {
+      if (via != null) { yield* this.route(p, m.x, via, sp); yield* this.toLane(p, m.lane); } // across in a clear lane, then step in
+      else yield* this.go(p, m.x, m.lane, sp);
+    }
+    // the big finish of a scene: the next celebration is a proper one, whatever came before
+    finale() { SD.finale(this.w); }
+    place(p, m, facing) { p.x = m.x; p.lane = p.laneT = m.lane; p.y = p.groundY(); if (facing) p.face(facing); }
+
     *wait(s) { yield s; }
     *until(fn, max = 30) { const t0 = this.sc.t; while (!fn() && this.sc.t - t0 < max) yield 0; }
     *tween(dur, fn) {
@@ -187,7 +225,8 @@
       })());
       return f;
     }
-    *exitAll(list, sp = 60, waveFirst = true) {
+    // base: the nearest-the-back lane to leave by (pass a front lane when a set stands mid-stage)
+    *exitAll(list, sp = 60, waveFirst = true, base = 12) {
       list = list.filter((p) => !p.dead);
       if (waveFirst) {
         list.forEach((p, i) => { p.action = 'wave'; p.face(p.x < this.cx ? 1 : -1); });
@@ -198,7 +237,7 @@
       const order = list.slice().sort((a, b) => Math.abs(a.x - this.edgeNear(a.x)) - Math.abs(b.x - this.edgeNear(b.x)));
       const cos = order.map((p, i) => this.run((function* (S) {
         p.action = 'none'; p.item = null; p.item2 = null; p.attach = null; p.loco = 'stand'; p.armF = p.armB = null; p.snug = false;
-        p.laneT = 12 + (i % 4) * 4; // between the back props and the front of the stage
+        p.laneT = base + (i % 4) * 4; // between the back props and the front of the stage
         yield i * 0.22;
         yield* S.walk(p, S.edgeNear(p.x), sp);
         p.dead = true;

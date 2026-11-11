@@ -275,7 +275,7 @@
     searchers.forEach((p) => { p.snug = true; }); pip.snug = true; // a huddle: close is the point
     yield searchers.map((p, i) => S.run(S.walk(p, pip.x + (i % 2 ? 1 : -1) * (34 + Math.floor(i / 2) * 26), 120)));
     searchers.forEach((p) => { p.face(Math.sign(pip.x - p.x) || 1); p.action = 'hug'; });
-    pip.action = 'cheer'; pip.say('heart', 1.6);
+    S.finale(); pip.action = 'cheer'; pip.say('heart', 1.6);
     for (let k = 0; k < 4; k++) { w.heart(pip.x + S.r.range(-40, 40), pip.y - 90); yield 0.4; }
     yield 0.8;
     all.forEach((p) => { p.action = 'none'; }); // still huddled: each lets go as they set off
@@ -409,7 +409,7 @@
       const sx0 = p.x, sy0 = p.y;
       p.action = 'armsUp'; p.loco = 'stand';
       yield* S.tween(0.55, (u) => { p.attach = () => ({ x: lerp(sx0, hx - dir * 10, u), y: lerp(sy0, hy + 20, u) }); });
-      p.attach = null; p.y = p.groundY(); p.jump(-200, -dir * 80); p.action = 'cheer';
+      S.finale(); p.attach = null; p.y = p.groundY(); p.jump(-200, -dir * 80); p.action = 'cheer';
       w.puff(p.x, p.groundY(), 3, 8);
       yield 0.3;
     }

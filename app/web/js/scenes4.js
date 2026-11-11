@@ -390,7 +390,7 @@
     // the losers drift off towards their own end, heads down, out of the way of the celebration
     losers.forEach((p, i) => { p.action = 'sleepy'; p.laneT = 30 + i * 3; skateTo(p, (winA ? rx1 : rx0) + (winA ? -1 : 1) * (60 + i * 60)); });
     yield 1.2;
-    winners.forEach((p) => { p.action = 'cheer'; p.jump(-260, 0); });
+    S.finale(); winners.forEach((p) => { p.action = 'cheer'; p.jump(-260, 0); });
     w.heart(hero.x, hero.y - 90);
     yield 1.4;
     winners.forEach((p) => { p.action = 'none'; p.snug = false; });
