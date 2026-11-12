@@ -1234,8 +1234,6 @@
         ctx.fillStyle = '#b8323f';
         ctx.beginPath(); ctx.moveTo(2, -62.4); ctx.lineTo(10, -62 + open * 1.6); ctx.lineTo(2, -60.2 + open * 2.2); ctx.closePath(); ctx.fill();
       }
-      // Rocco's easy half-smile, tucked in behind the beak
-      if (this.kind === 'rocco' && open < 0.5) { ctx.save(); ctx.strokeStyle = '#eef2f8'; ctx.lineWidth = 1.5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(1.5, -60.6); ctx.quadraticCurveTo(-2.5, -59.6, -5, -62.6); ctx.stroke(); ctx.restore(); }
       // upper mandible
       if (wide > 0) { ctx.translate(1, -63.5); ctx.rotate(-wide * 0.55); ctx.translate(-1, 63.5); }
       ctx.beginPath();

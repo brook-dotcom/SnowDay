@@ -8,7 +8,7 @@ after a version number to have installed copies update without asking.
 - The Christmas Card prints a real photo of the crew as they stood when the flash went
 - Carol singers sing with eyes open and beaks wide
 - Santa's hat sits on his head; his chair is centred on its rug
-- Rocco has a relaxed, easy look and a half-smile instead of wide eyes
+- Rocco has a relaxed, easy look instead of wide eyes
 - Belly-slides redrawn from a traced pose: flat on the belly, head up, flipper back, feet and scarf trailing
 
 ## 1.6.0
