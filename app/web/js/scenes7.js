@@ -91,10 +91,14 @@
   // hats
   const santaHat = (ctx, p) => {
     ctx.translate(0, p.kind === 'rocco' ? -7 : 0);
+    const sw = Math.sin(p.t * 3) * 1.5;
     ctx.fillStyle = RED; ctx.strokeStyle = INK; ctx.lineWidth = 2.2; ctx.lineJoin = 'round';
-    ctx.beginPath(); ctx.moveTo(-30, -92); ctx.quadraticCurveTo(-22, -128, 0, -128); ctx.quadraticCurveTo(-34, -138, -48, -112 + Math.sin(p.t * 3) * 1.5); ctx.quadraticCurveTo(-40, -112, -34, -104); ctx.quadraticCurveTo(-10, -112, 24, -96); ctx.closePath(); ctx.fill(); ctx.stroke();
-    blob(ctx, [[-28, -93, 6], [-18, -96, 6.5], [-7, -98, 6.5], [4, -98, 6.5], [14, -97, 6], [23, -94, 5.5]], '#ffffff', INK, 2.6);
-    blob(ctx, [[-48, -110 + Math.sin(p.t * 3) * 1.5, 6.5]], '#ffffff', INK, 2.6);
+    // the cone: up from the band, over, and down behind the head
+    ctx.beginPath(); ctx.moveTo(-27, -101); ctx.quadraticCurveTo(-24, -136, 2, -138); ctx.quadraticCurveTo(-30, -150, -50, -122 + sw);
+    ctx.lineTo(-42, -116 + sw); ctx.quadraticCurveTo(-30, -130, -14, -126); ctx.quadraticCurveTo(18, -128, 27, -101); ctx.closePath(); ctx.fill(); ctx.stroke();
+    // fur band: one soft roll across the brow
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); SD.rrect(ctx, -32, -108, 64, 13, 6.5); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(-48, -117 + sw, 7, 0, TAU); ctx.fill(); ctx.stroke();
   };
   const beard = (ctx) => blob(ctx, [[2, -56, 7], [12, -50, 9], [24, -48, 9], [34, -54, 7], [28, -40, 8], [16, -38, 8], [22, -30, 6]], '#ffffff', 'rgba(110,125,150,0.9)', 2.4);
   const santa = (ctx, p) => { ctx.save(); beard(ctx); ctx.restore(); santaHat(ctx, p); };
@@ -114,35 +118,58 @@
   // =====================================================================
   // depth plan: engine 10 · crank and lever hands 12–16 · planners and watchers 22–28 (left of the
   // engine) · the window-cleaners come back at 62–70, big, right up against the glass
-  const TK = 1.5; // it's a big machine
-  // where the sling's pouch is, in the world (the scene needs it whether or not a frame is drawn)
-  function pouchOf(tb) {
-    const lx = Math.cos(tb.th) * 150, ly = -118 + Math.sin(tb.th) * 150, sa = tb.th + tb.lag;
-    return [tb.x + (lx + Math.cos(sa + 0.9) * 40) * TK, tb.y + (Math.min(-4, ly + Math.sin(sa + 0.9) * 40) - 2) * TK];
+  // The engine is seen from the front: it points out of the picture. phi is the throwing arm's
+  // angle in the plane running away from us: 0 = pointing straight away, PI/2 = straight up,
+  // PI = straight at the glass. Things further away are drawn a little smaller.
+  const TK = 1.4, AX = 122, ARM = 108, SH = 42, SL = 58;
+  const near = (d) => 1 - 0.17 * d; // d: -1 (towards us) .. 1 (away)
+  function armOf(tb) {
+    const c = Math.cos(tb.phi), sn = Math.sin(tb.phi), ts = near(c), ws = near(-c * SH / ARM);
+    const tip = [0, -AX - ARM * sn * ts], k = clamp(-tb.lag / 0.9, 0, 1);
+    const py = Math.min(-9, tip[1] + (1 - k) * SL * ts - k * SL * sn * ts);
+    return { c, tip, ts, ws, cw: [0, -AX + SH * sn * ws], pouch: [0, py], ps: near(c * (1 + k * 0.5)) };
   }
+  // where the sling's pouch is, in the world (the scene needs it whether or not a frame is drawn)
+  function pouchOf(tb) { const a = armOf(tb); return [tb.x, tb.y + a.pouch[1] * TK]; }
   function drawTreb(ctx, tb) {
     ctx.scale(TK, TK);
-    const th = tb.th, P = [0, -118];
-    // base and A-frame
-    line(ctx, [[-120, -6], [110, -6]], WOOD_D, 9);
-    for (const x of [-96, 86]) { ctx.fillStyle = WOOD_D; ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, -6, 12, 0, TAU); ctx.fill(); ctx.stroke(); ctx.fillStyle = WOOD; ctx.beginPath(); ctx.arc(x, -6, 4, 0, TAU); ctx.fill(); ctx.stroke(); }
-    line(ctx, [[-46, -8], P, [46, -8]], WOOD, 8);
-    line(ctx, [[-26, -56], [26, -56]], WOOD, 6);
-    // the arm: long end out to the sling, short end to the weight box
-    const L = 150, Sh = 48, lx = P[0] + Math.cos(th) * L, ly = P[1] + Math.sin(th) * L, sx = P[0] - Math.cos(th) * Sh, sy = P[1] - Math.sin(th) * Sh;
-    line(ctx, [[sx, sy], [lx, ly]], '#b88352', 7);
-    // weight box, hanging
-    line(ctx, [[sx, sy], [sx, sy + 14]], '#8c95a5', 2, false);
-    box(ctx, sx - 20, sy + 14, 40, 32, WOOD_D, 3);
-    for (let k = 0; k < Math.round(tb.fill * 4); k++) box(ctx, sx - 16 + (k % 2) * 16, sy + 30 - Math.floor(k / 2) * 13, 15, 12, '#cfe6f7', 2, 1.4);
-    // sling and pouch
-    const sa = th + tb.lag, px = lx + Math.cos(sa + 0.9) * 40, py = Math.min(-4, ly + Math.sin(sa + 0.9) * 40);
-    line(ctx, [[lx, ly], [px, py]], '#d8c9a3', 2, false);
-    ctx.fillStyle = '#8b5e3c'; ctx.strokeStyle = INK; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.ellipse(px, py, 13, 5, 0, 0, PI); ctx.fill(); ctx.stroke();
-    // axle, crank wheel and lever
-    ctx.fillStyle = '#8c95a5'; ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(P[0], P[1], 6, 0, TAU); ctx.fill(); ctx.stroke();
-    ctx.save(); ctx.translate(-74, -30); ctx.rotate(tb.crank); ctx.fillStyle = WOOD; ctx.beginPath(); ctx.arc(0, 0, 15, 0, TAU); ctx.fill(); ctx.stroke(); for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(k * PI / 2) * 20, Math.sin(k * PI / 2) * 20); ctx.stroke(); } ctx.restore();
-    ctx.save(); ctx.translate(58, -10); ctx.rotate(-0.5 + tb.lever * 1.1); line(ctx, [[0, 0], [0, -40]], '#8c95a5', 4); ctx.fillStyle = RED; ctx.strokeStyle = INK; ctx.beginPath(); ctx.arc(0, -42, 6, 0, TAU); ctx.fill(); ctx.stroke(); ctx.restore();
+    const a = armOf(tb), away = a.c > 0;
+    const arm = () => {
+      const w0 = 5, w1 = 4.2 * a.ts;
+      ctx.fillStyle = '#b88352'; ctx.strokeStyle = INK; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-w0, -AX); ctx.lineTo(-w1, a.tip[1]); ctx.lineTo(w1, a.tip[1]); ctx.lineTo(w0, -AX); ctx.closePath(); ctx.fill(); ctx.stroke();
+      // sling: two cords down to the pouch
+      for (const sx of [-1, 1]) line(ctx, [[sx * 2, a.tip[1]], [sx * 11 * a.ps, a.pouch[1]]], '#d8c9a3', 1.8, false);
+      ctx.fillStyle = '#8b5e3c'; ctx.strokeStyle = INK; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.ellipse(0, a.pouch[1], 15 * a.ps, 5.5 * a.ps, 0, 0, PI); ctx.closePath(); ctx.fill(); ctx.stroke();
+    };
+    const weight = () => {
+      const s = a.ws, y = a.cw[1];
+      ctx.fillStyle = '#b88352'; ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-5, -AX); ctx.lineTo(-5 * s, y); ctx.lineTo(5 * s, y); ctx.lineTo(5, -AX); ctx.closePath(); ctx.fill(); ctx.stroke();
+      for (const sx of [-1, 1]) line(ctx, [[sx * 4 * s, y], [sx * 16 * s, y + 13 * s]], '#8c95a5', 2, false);
+      box(ctx, -24 * s, y + 13 * s, 48 * s, 34 * s, WOOD_D, 3);
+      ctx.strokeStyle = 'rgba(30,20,10,0.35)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-24 * s, y + 24 * s); ctx.lineTo(24 * s, y + 24 * s); ctx.moveTo(-24 * s, y + 35 * s); ctx.lineTo(24 * s, y + 35 * s); ctx.stroke();
+      for (let k = 0; k < Math.round(tb.fill * 4); k++) box(ctx, (-20 + (k % 2) * 21) * s, y + (2 - Math.floor(k / 2) * 12) * s, 19 * s, 12 * s, '#cfe6f7', 2, 1.4);
+    };
+    // the far ends of the skids, and whichever half of the arm is away from us
+    for (const sx of [-1, 1]) box(ctx, sx * 55 - 9, -19, 18, 10, WOOD_D, 2);
+    line(ctx, [[-55, -62], [55, -62]], WOOD_D, 5);
+    if (away) arm(); else weight();
+    // the frame: two leaning posts, a beam low down, the axle across the top
+    for (const sx of [-1, 1]) {
+      line(ctx, [[sx * 55, -16], [sx * 58, -AX + 2]], WOOD_D, 6);          // back leg
+      line(ctx, [[sx * 74, -5], [sx * 60, -AX - 6]], WOOD, 9);              // front leg
+      box(ctx, sx * 74 - 15, -13, 30, 13, WOOD_D, 3);                       // skid, end on
+      box(ctx, sx * 96 - 5, -25, 10, 25, '#5a4632', 4);                     // wheel, edge on
+      line(ctx, [[sx * 86, -12], [sx * 96, -12]], '#8c95a5', 3, false);
+    }
+    line(ctx, [[-72, -24], [72, -24]], WOOD, 7);
+    line(ctx, [[-68, -AX], [68, -AX]], '#8c95a5', 7);
+    for (const sx of [-1, 1]) { ctx.fillStyle = WOOD_D; ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(sx * 61, -AX, 8, 0, TAU); ctx.fill(); ctx.stroke(); }
+    if (away) weight(); else arm();
+    ctx.fillStyle = '#6f7887'; ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, -AX, 7, 0, TAU); ctx.fill(); ctx.stroke();
+    // crank wheel on one post, the release lever on the other
+    ctx.save(); ctx.translate(-88, -52); ctx.rotate(tb.crank); ctx.fillStyle = WOOD; ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 15, 0, TAU); ctx.fill(); ctx.stroke(); for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(k * PI / 2) * 20, Math.sin(k * PI / 2) * 20); ctx.stroke(); } ctx.restore();
+    ctx.save(); ctx.translate(88, -14); ctx.rotate(0.5 - tb.lever * 1.1); line(ctx, [[0, 0], [0, -40]], '#8c95a5', 4); ctx.fillStyle = RED; ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, -42, 6, 0, TAU); ctx.fill(); ctx.stroke(); ctx.restore();
   }
   const snowball = (ctx, r) => {
     ctx.fillStyle = '#ffffff'; ctx.strokeStyle = 'rgba(96,126,176,0.9)'; ctx.lineWidth = Math.max(1.6, r * 0.05); ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill(); ctx.stroke();
@@ -150,11 +177,10 @@
     ctx.strokeStyle = 'rgba(150,180,220,0.6)'; ctx.beginPath(); ctx.arc(-r * 0.2, -r * 0.2, r * 0.5, PI * 1.1, PI * 1.6); ctx.stroke();
   };
   const blueprint = (ctx) => { box(ctx, -13, -18, 26, 20, '#3f6fb5', 2); ctx.strokeStyle = '#dce9ff'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-8, -4); ctx.lineTo(0, -13); ctx.lineTo(8, -4); ctx.moveTo(-9, -3); ctx.lineTo(9, -3); ctx.moveTo(-6, -9); ctx.lineTo(7, -12); ctx.stroke(); };
-  const squeegee = { at: 'front', draw(ctx, p, hx, hy) { ctx.translate(hx, hy); ctx.rotate(-0.5); line(ctx, [[0, 14], [0, -22]], '#8c95a5', 3.4); box(ctx, -14, -28, 28, 7, '#3f6fb5', 2); ctx.fillStyle = INK; ctx.fillRect(-14, -31, 28, 3); } };
 
   function* sceneTrebuchet(S) {
     const w = S.w, r = S.r, cx = S.cx, run = (g) => S.run(g);
-    const M = S.marks({ eng: [60, 10, true], crank: [-78, 14], lever: [196, 15], load: [-160, 11], specs: [-330, 24], cap: [-262, 27], w1: [-420, 20], w2: [-486, 26], w3: [-390, 31], w4: [320, 24], w5: [392, 28] }, { scene: 'trebuchet' });
+    const M = S.marks({ eng: [60, 10, true], crank: [-104, 14], lever: [196, 15], load: [-160, 11], specs: [-330, 24], cap: [-262, 27], w1: [-420, 20], w2: [-486, 26], w3: [-390, 31], w4: [320, 24], w5: [392, 28] }, { scene: 'trebuchet' });
     const cap = S.spawn({ kind: 'captain' }), specs = S.spawn({ kind: 'specs' }), rocco = S.spawn({ kind: 'rocco' }), chubby = S.spawn({ kind: 'chubby' }), holly = S.spawn({ kind: 'holly' }), pip = S.spawn({ kind: 'pip' }), c1 = S.spawn({ kind: 'crew' }), c2 = S.spawn({ kind: 'crew' });
     const all = [cap, specs, rocco, chubby, holly, pip, c1, c2];
     all.forEach((p) => { p.hidden = true; p.x = S.offL - 200; });
@@ -167,8 +193,8 @@
     specs.action = 'point'; specs.say('!', 1); yield 1; specs.action = 'inspect'; cap.face(1); cap.action = 'point'; yield 0.8; cap.action = 'none';
 
     // ---- 2. the engine is wheeled on ----
-    const tb = S.add(new Draw(w, S.side(1) + 180, M.eng.lane, drawTreb, { hw: 190, h: 190, solid: true, th: 4.3, lag: 0.2, fill: 0, crank: 0, lever: 0 }));
-    yield* carryIn(S, tb, [rocco, c1], M.eng.x, { half: 200, sp: 100, lift: 0, action: 'push', lane: M.eng.lane + 3 });
+    const tb = S.add(new Draw(w, S.side(1) + 180, M.eng.lane, drawTreb, { hw: 142, h: 330, solid: true, phi: 1.8, lag: 0, fill: 0, crank: 0, lever: 0 }));
+    yield* carryIn(S, tb, [rocco, c1], M.eng.x, { half: 156, sp: 100, lift: 0, action: 'push', lane: M.eng.lane + 3 });
     run(S.to(c1, M.w4, 60, 20)); yield* S.to(rocco, M.lever, 60, 16);
     rocco.face(-1);
     // ---- 3. ice for the weight box; the arm is cranked down ----
@@ -178,24 +204,24 @@
       yield* S.go(p, M.eng.x + 60, 16, 85);
       p.item = null; p.action = 'throw'; yield 0.25;
       yield* S.tween(0.3, (u) => { tb.fill = tb.fill + (p === chubby ? 0.5 : 0.5) * u * 0.2; });
-      tb.fill = p === chubby ? 0.5 : 1; w.puff(tb.x + 30, tb.y - 130, 2, 5); p.action = 'none';
+      tb.fill = p === chubby ? 0.5 : 1; w.puff(tb.x, tb.y - 150, 2, 5); p.action = 'none';
       run(S.to(p, p === chubby ? M.w5 : M.w1, 70, p === chubby ? 22 : 34));
     }
     offstage(S, holly, -1, 13);
     yield* S.go(holly, M.crank.x, M.crank.lane, 80); holly.face(1); holly.action = 'pull';
-    yield* S.tween(3.4, (u) => { tb.th = lerp(4.3, 2.72, SD.easeInOut(u)); tb.crank = u * 14; tb.lag = 0.2 * (1 - u); if (((u * 12) | 0) !== (((u - 0.01) * 12) | 0)) w.puff(tb.x - 74, tb.y - 30, 1, 3, 0.3, 0.3); });
+    yield* S.tween(3.4, (u) => { tb.phi = lerp(1.8, -0.5, SD.easeInOut(u)); tb.crank = u * 14; if (((u * 12) | 0) !== (((u - 0.01) * 12) | 0)) w.puff(tb.x - 123, tb.y - 73, 1, 3, 0.3, 0.3); });
     holly.action = 'none'; holly.say('heart', 0.8);
     // ---- 4. the snowball, rolled in and loaded ----
     const ball = S.add(new SD.SnowBall(w, S.side(-1) - 30, M.load.lane, 8));
     offstage(S, pip, -1, M.load.lane); pip.action = 'push'; pip.loco = 'walk';
     pip.attach = () => ({ x: ball.x - ball.r - 18, y: pip.groundY() });
-    const bx0 = ball.x, bx1 = tb.x - 215;
+    const bx0 = ball.x, bx1 = tb.x - 235;
     yield* S.tween(Math.abs(bx1 - bx0) / 62, (u) => { const nx = lerp(bx0, bx1, u); ball.roll(nx - ball.x); ball.r = lerp(8, 30, u); pip.phase += 0.18; });
     pip.attach = null; pip.loco = 'stand'; pip.action = 'none'; pip.y = pip.groundY();
     run(S.to(holly, M.w2, 60, 30));
     const b0 = [ball.x, ball.y - ball.r];
     ball.follow = false;
-    yield* S.tween(0.6, (u) => { ball.x = lerp(b0[0], pouchOf(tb)[0], u); ball.cy = lerp(b0[1], pouchOf(tb)[1] - 26, u) - Math.sin(u * PI) * 26; });
+    yield* S.tween(0.6, (u) => { ball.x = lerp(b0[0], pouchOf(tb)[0], u); ball.cy = lerp(b0[1], pouchOf(tb)[1] - 26, u) - Math.sin(u * PI) * 60; if (u > 0.5) ball.lane = M.eng.lane - 1; });
     pip.action = 'cheer'; yield 0.6; pip.action = 'none';
     yield* S.to(pip, M.w3, 70, 34);
     // ---- 5. three, two, one ----
@@ -209,7 +235,7 @@
     fly.r = 0;
     let rel = null;
     yield* S.tween(0.5, (u) => {
-      tb.th = lerp(2.72, 5.25, SD.easeIn(u)); tb.lag = -0.9 * Math.sin(u * PI);
+      tb.phi = lerp(-0.5, 2.45, SD.easeIn(u)); tb.lag = -0.9 * Math.sin(u * PI);
       if (!rel) { ball.x = pouchOf(tb)[0]; ball.cy = pouchOf(tb)[1] - 26; if (u > 0.72) { rel = [ball.x, ball.cy]; ball.dead = true; } }
     });
     if (!rel) { rel = [ball.x, ball.cy]; ball.dead = true; }
@@ -224,9 +250,9 @@
     });
     fly.dead = true;
     // ---- 7. SPLAT ----
-    const cv = document.createElement('canvas'); cv.width = 1300; cv.height = 900;
+    const cv = document.createElement('canvas'); cv.width = 2000; cv.height = 1400; // room for every last lump
     const sc = cv.getContext('2d'), sr = SD.mulberry(S.seed ^ 77);
-    sc.translate(650, 380);
+    sc.translate(1000, 620);
     const lumps = []; for (let k = 0; k < 46; k++) { const a = sr() * TAU, d = sr() * 250; lumps.push([Math.cos(a) * d * 1.35, Math.sin(a) * d * 0.9, 70 + sr() * 110]); }
     for (let k = 0; k < 26; k++) { const a = (k / 26) * TAU + sr() * 0.2, d = 360 + sr() * 190; lumps.push([Math.cos(a) * d * 1.25, Math.sin(a) * d * 0.8, 10 + sr() * 26]); lumps.push([Math.cos(a) * d * 1.02, Math.sin(a) * d * 0.66, 22 + sr() * 30]); }
     blob(sc, lumps, '#ffffff', 'rgba(110,140,190,0.9)', 5);
@@ -235,10 +261,12 @@
       if (g.k <= 0) return;
       const s = SD.backOut(Math.min(1, g.k)) * 1.0;
       ctx.translate(cx, gy - 330 + g.slide); ctx.scale(s, s * (1 + g.slide / 1400));
-      ctx.globalAlpha = g.alpha; ctx.drawImage(cv, -650, -380);
+      ctx.globalAlpha = g.alpha; ctx.drawImage(cv, -1000, -620);
     }));
     splat.slide = 0;
-    splat.wipe = (x, y, rr) => { sc.save(); sc.globalCompositeOperation = 'destination-out'; sc.beginPath(); sc.arc(x - cx, (y - (gy - 330 + splat.slide)) / (1 + splat.slide / 1400), rr, 0, TAU); sc.fill(); sc.restore(); };
+    // the snow comes off exactly where the blade has been: a stroke from where it was to where it is
+    const toSplat = (x, y) => [x - cx, (y - (gy - 330 + splat.slide)) / (1 + splat.slide / 1400)];
+    splat.wipe = (x0, y0, x1, y1, wd) => { const a = toSplat(x0, y0), b = toSplat(x1, y1); sc.save(); sc.globalCompositeOperation = 'destination-out'; sc.lineCap = 'round'; sc.lineWidth = wd; sc.beginPath(); sc.moveTo(a[0], a[1]); sc.lineTo(b[0], b[1] + 0.01); sc.stroke(); sc.restore(); };
     yield* S.tween(0.16, (u) => { splat.k = u; });
     for (let k = 0; k < 10; k++) w.puff(cx + r.range(-500, 500), gy - r.range(40, 420), 3, 16, 2, 1);
     all.forEach((p) => { if (!p.hidden) { p.action = 'startle'; p.jump(-150, 0); } });
@@ -246,36 +274,60 @@
     all.forEach((p) => { if (!p.hidden) { p.action = 'none'; p.face(Math.sign(cx - p.x) || 1); } });
     yield 0.8;
     specs.action = 'inspect'; yield 0.9; specs.say('?', 1.2); specs.action = 'shrug';
-    cap.action = 'shrug'; yield 1.4; cap.action = 'point'; cap.face(-1); specs.action = 'none';
+    cap.action = 'shrug'; yield 1.4; cap.action = 'point'; cap.face(1); specs.action = 'none';
     // the snow slumps down the glass
     run(S.tween(7, (u) => { splat.slide = 210 * SD.easeInOut(u); }));
-    // ---- 8. cleaning the screen: three of them come round to our side of the glass ----
-    const cleaners = [pip, chubby, holly];
-    yield cleaners.map((p, i) => run((function* () { yield i * 0.3; p.face(-1); yield* S.go(p, S.side(-1), p.laneT, 95); p.hidden = true; })()));
+    // ---- 8. cleaning the screen: Chubby is sent round to our side of the glass ----
+    chubby.face(1); yield* S.go(chubby, S.side(1), chubby.laneT, 100); chubby.hidden = true;
     cap.action = 'none';
-    yield 0.6;
-    const wipeY = [150, 260, 370];
-    const sweeps = cleaners.map((p, i) => run((function* () {
-      p.size = 1.5; offstage(S, p, -1, 62 + i * 4); p.item = squeegee; p.action = 'reach';
-      yield i * 1.7;
-      p.goTo(S.side(1), 150);
-      while (p.x < S.ax1 + 60) {
-        p.reachTo = [p.x + 40, gy - wipeY[i]];
-        for (let dy = -70; dy <= 70; dy += 35) splat.wipe(p.x + 30, gy - wipeY[i] + dy + Math.sin(p.x / 40) * 30, 62);
-        if (p === pip && Math.abs(p.x - cx) < 3 && !pip.peeked) {
-          // Pip stops in the middle and looks straight at us
-          pip.peeked = true; p.target = null; p.action = 'none'; p.reachTo = null; yield 0.4;
-          p.action = 'tap'; for (let k = 0; k < 3; k++) { w.sparkle(p.x + 34, gy - 96, 1, '#ffffff', 8); yield 0.35; }
-          p.say('?', 1); yield 1.1; p.action = 'wave'; p.say('heart', 1.4); yield 1.6;
-          p.action = 'reach'; p.goTo(S.side(1), 150);
-        }
-        yield 0;
+    yield 1.2;
+    // ...and up he comes from under the picture, very close indeed
+    const big = chubby, B = w.H;
+    big.hidden = false; big.noShadow = true; big.lane = big.laneT = 1001; big.size = 5.1; big.loco = 'stand'; big.action = 'none'; big.target = null;
+    const U = big.size * big.K.ky, st = { x: cx - 300, drop: 84 };
+    big.attach = () => ({ x: st.x, y: B + (60 + st.drop) * U });
+    big.face(1);
+    yield* S.tween(1.1, (u) => { st.drop = lerp(84, 44, SD.easeOut(u)); }); // the bobble first
+    yield 0.5;
+    yield* S.tween(0.5, (u) => { st.drop = lerp(44, 9, SD.easeInOut(u)); });                   // then two eyes
+    big.eyeOverride = 'wide'; yield 0.5; big.face(-1); yield 0.5; big.face(1); yield 0.5; big.eyeOverride = null;
+    yield* S.tween(0.35, (u) => { st.drop = lerp(9, -20, SD.backOut(u)); });
+    // a squeegee on a long pole; the blade goes where bl says and the flipper follows it
+    const bl = { x: st.x, y: B + 80, on: false };
+    big.item = { at: 'front', draw(ctx, p, hx, hy) {
+      const l = p.toLocal(bl.x, bl.y), a = Math.atan2(l[1] - hy, l[0] - hx);
+      line(ctx, [[hx - Math.cos(a) * 6, hy - Math.sin(a) * 6], l], '#8c95a5', 2.6);
+      ctx.translate(l[0], l[1]); ctx.rotate(a + PI / 2); box(ctx, -17, -3, 34, 6, '#3f6fb5', 2, 1.6); ctx.fillStyle = INK; ctx.fillRect(-17, -6, 34, 3.4);
+    } };
+    const blade = (x, y) => { if (bl.on) splat.wipe(bl.x, bl.y, x, y, 215); bl.x = x; bl.y = y; big.reachTo = [x, y]; if (Math.abs(x - st.x) > 60) big.face(-Math.sign(x - st.x)); }; // the wiping flipper stays clear of his face
+    big.action = 'reach';
+    let dir = 1;
+    const arcs = function* (lo, hi) {
+      for (const R of [200, 390, 580, 770, 960]) {
+        const a0 = dir > 0 ? lo : hi, a1 = dir > 0 ? hi : lo, px = st.x;
+        yield* S.tween(0.22, (u) => { bl.on = false; blade(lerp(bl.x, px + Math.sin(a0) * R, u), lerp(bl.y, B - 30 - Math.cos(a0) * R, u)); });
+        bl.on = true;
+        yield* S.tween(0.55, (u) => { const a = lerp(a0, a1, SD.easeInOut(u)); blade(px + Math.sin(a) * R, B - 30 - Math.cos(a) * R); });
+        bl.on = false; dir = -dir;
       }
-      p.hidden = true; p.item = null; p.size = 0.74;
-    })()));
-    yield sweeps;
-    yield* S.tween(0.8, (u) => { splat.alpha = 1 - u; });
+    };
+    yield* arcs(-1.5, 0.4);
+    // across to the other side, wiping along the bottom as he goes
+    yield* S.tween(0.3, (u) => { blade(lerp(bl.x, st.x + 150, u), lerp(bl.y, B - 110, u)); });
+    bl.on = true;
+    yield* S.tween(1.3, (u) => { st.x = lerp(cx - 300, cx + 300, SD.easeInOut(u)); blade(st.x + 150, B - 110); });
+    bl.on = false;
+    yield* arcs(-0.4, 1.5);
+    // one last look for smears, a wave for whoever's out there, and down again, wiping as he goes
+    yield* S.tween(0.3, (u) => { blade(lerp(bl.x, st.x - 150, u), lerp(bl.y, B - 110, u)); });
+    bl.on = true;
+    yield* S.tween(1.5, (u) => { st.x = lerp(cx + 300, cx - 240, SD.easeInOut(u)); blade(st.x - 170, B - 110); });
+    bl.on = false; big.action = 'none'; big.reachTo = null; big.item = null;
+    yield* S.tween(0.5, (u) => { splat.alpha = 1 - u; });
     splat.dead = true;
+    big.face(1); big.action = 'inspect'; yield 0.9; big.action = 'wave'; big.eyeOverride = 'happy'; yield 1.6; big.eyeOverride = null; big.action = 'none';
+    yield* S.tween(0.7, (u) => { st.drop = lerp(-20, 90, SD.easeIn(u)); });
+    big.hidden = true; big.attach = null; big.noShadow = false; big.size = 0.74;
     // ---- 9. and wind it back again ----
     const rest = all.filter((p) => !p.hidden);
     S.finale(); rest.forEach((p) => { p.action = 'cheer'; }); yield 1.4;
@@ -298,16 +350,6 @@
     ctx.fillStyle = c.blink > 0 ? '#ff4d4d' : '#6b2a2a'; ctx.beginPath(); ctx.arc(c.dir * 10, -8, 2.4, 0, TAU); ctx.fill();
     ctx.restore();
   };
-  function printOf(kind) { // what came out: a little picture of the mistake, or of the keeper
-    return (ctx) => {
-      ctx.fillStyle = '#b9d6ee'; ctx.fillRect(-44, -36, 88, 56);
-      ctx.fillStyle = '#f4f8ff'; ctx.fillRect(-44, 8, 88, 12);
-      const peng = (x, y, s, blink) => { ctx.fillStyle = '#1b2233'; ctx.beginPath(); ctx.ellipse(x, y, 7 * s, 10 * s, 0, 0, TAU); ctx.fill(); ctx.fillStyle = CREAM; ctx.beginPath(); ctx.ellipse(x + 1.5 * s, y + 2 * s, 4.4 * s, 6.5 * s, 0, 0, TAU); ctx.fill(); ctx.fillStyle = '#f2952f'; ctx.fillRect(x + 4 * s, y - 3 * s, 4 * s, 2 * s); ctx.fillStyle = INK; if (blink) ctx.fillRect(x, y - 5.6 * s, 3.2 * s, 1); else { ctx.beginPath(); ctx.arc(x + 1.5 * s, y - 5 * s, 1.1 * s, 0, TAU); ctx.fill(); } };
-      if (kind === 'blink') { for (let k = 0; k < 5; k++) peng(-30 + k * 15, 2, 1, true); }
-      else if (kind === 'feet') { ctx.fillStyle = '#f4f8ff'; ctx.fillRect(-44, -36, 88, 56); ctx.fillStyle = '#f2952f'; for (let k = 0; k < 5; k++) { ctx.beginPath(); ctx.ellipse(-32 + k * 16, -30, 5, 2.6, 0, 0, TAU); ctx.fill(); ctx.beginPath(); ctx.ellipse(-25 + k * 16, -30, 5, 2.6, 0, 0, TAU); ctx.fill(); } }
-      else { ctx.save(); ctx.translate(26, 10); tree(ctx, 40, 0, 1); ctx.restore(); for (let k = 0; k < 4; k++) peng(-32 + k * 13, 2 - (k % 2) * 5, 1, false); }
-    };
-  }
   function* sceneCard(S) {
     const w = S.w, r = S.r, cx = S.cx, run = (g) => S.run(g);
     const side = r.sign(); // which side the camera stands
@@ -341,6 +383,20 @@
     const group = posers.map((q) => q[0]);
     const flash = S.add(new Glass(w, (ctx, g) => { if (g.k > 0.01) { ctx.fillStyle = `rgba(255,255,255,${g.k})`; ctx.fillRect(-1e5, -1e5, 2e5, 2e5); } }));
     const gy = S.ground(cx);
+    // the photo is the real thing: whoever is standing there, as they are when the flash goes
+    const snap = (kind) => {
+      const cv = document.createElement('canvas'); cv.width = 528; cv.height = 336;
+      const c = cv.getContext('2d'), k = 528 / 450, low = kind === 'feet';
+      const sky = c.createLinearGradient(0, 0, 0, 336); sky.addColorStop(0, '#8fbbe6'); sky.addColorStop(1, '#dcebf8'); c.fillStyle = sky; c.fillRect(0, 0, 528, 336);
+      c.translate(264, low ? 40 : 282); if (low) { c.rotate(side * 0.2); c.scale(k * 1.5, k * 1.5); } else c.scale(k, k);
+      c.translate(-cx, -gy);
+      c.fillStyle = '#f6f9ff'; c.fillRect(cx - 3000, gy + 6, 6000, 3000);
+      c.fillStyle = 'rgba(150,180,220,0.25)'; c.fillRect(cx - 3000, gy + 6, 6000, 5);
+      [bunt, tr, gift, ...group, specs].slice().sort((p, q) => p.lane - q.lane).forEach((o) => { const v = o.visible; o.visible = true; o.draw(c); o.visible = v; });
+      return cv;
+    };
+    const cross = (ctx) => { line(ctx, [[-5, -5], [5, 5]], RED, 2.6, false); line(ctx, [[5, -5], [-5, 5]], RED, 2.6, false); };
+    const mark = { blink: cross, feet: cross, good: (ctx) => line(ctx, [[-6, 0], [-2, 5], [7, -6]], '#2f9e5f', 2.8, false) };
     const shot = function* (kind, during) {
       // set the timer, run round to the last place, 3-2-1, flash, and see what came out
       specs.face(-side); specs.action = 'tap'; yield 0.7; specs.action = 'none';
@@ -348,13 +404,15 @@
       group.forEach((p) => { p.action = 'none'; p.face(side); });
       for (const n of ['3', '2', '1']) { cam.blink = 1; w.sparkle(cam.x, cam.y - 66, 1, '#ff6b6b', 5); yield 0.35; cam.blink = 0; yield 0.35; if (n === '2' && during) run(during()); }
       [...group, specs].forEach((p) => { if (p.action === 'none') p.action = 'cheer'; });
-      yield* S.tween(0.12, (u) => { flash.k = u * 0.9; }); yield* S.tween(0.5, (u) => { flash.k = 0.9 * (1 - u); });
+      yield* S.tween(0.12, (u) => { flash.k = u * 0.9; });
+      const photo = snap(kind);
+      yield* S.tween(0.5, (u) => { flash.k = 0.9 * (1 - u); });
       // the print
       const pr = S.add(new Glass(w, (ctx, g) => {
         const u = SD.backOut(Math.min(1, g.k));
         ctx.translate(lerp(cam.x, cx, u), lerp(cam.y - 60, gy - 330, u)); ctx.rotate((1 - u) * 0.6 - 0.04); ctx.scale(0.3 + u * 2.3, 0.3 + u * 2.3);
         ctx.globalAlpha = g.alpha; ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(-49, -41, 104, 84);
-        box(ctx, -52, -44, 104, 84, '#ffffff', 3); printOf(kind)(ctx);
+        box(ctx, -52, -44, 104, 84, '#ffffff', 3); ctx.drawImage(photo, -44, -36, 88, 56); ctx.strokeStyle = 'rgba(40,50,70,0.5)'; ctx.lineWidth = 0.8; ctx.strokeRect(-44, -36, 88, 56); ctx.translate(0, 30); mark[kind](ctx);
       }));
       yield* S.tween(0.7, (u) => { pr.k = u; });
       yield 2.2;
@@ -413,15 +471,15 @@
     lights(ctx, -246, -196, 0, -192, 12, t, on, 20); lights(ctx, 0, -192, 246, -196, 12, t + 2, on, 20);
     // a framed list on the wall, and a rug
     box(ctx, -110, -150, 44, 56, CREAM, 3); ctx.strokeStyle = 'rgba(60,70,90,0.6)'; ctx.lineWidth = 1.4; for (let k = 0; k < 5; k++) { ctx.beginPath(); ctx.moveTo(-102, -140 + k * 9); ctx.lineTo(-76, -140 + k * 9); ctx.stroke(); }
-    ctx.fillStyle = '#b8323b'; ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(-10, 14, 170, 15, 0, 0, TAU); ctx.fill(); ctx.stroke(); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(-10, 14, 150, 10.5, 0, 0, TAU); ctx.stroke();
+    ctx.fillStyle = '#b8323b'; ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(0, 14, 170, 15, 0, 0, TAU); ctx.fill(); ctx.stroke(); ctx.strokeStyle = '#f2c14e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(0, 14, 150, 10.5, 0, 0, TAU); ctx.stroke();
   }
   function drawChair(ctx, c) {
     ctx.rotate(c.tip * 0.09); ctx.translate(0, c.tip * 5);
-    box(ctx, -46, -112 + c.squash * 6, 80, 112, '#8f2f3a', 16); // back
-    ctx.strokeStyle = GOLD; ctx.lineWidth = 2; ctx.beginPath(); SD.rrect(ctx, -38, -104 + c.squash * 6, 64, 60, 12); ctx.stroke();
-    box(ctx, -52, -44 + c.squash * 8, 100, 34 - c.squash * 8, '#a63a45', 9); // seat cushion
-    box(ctx, -58, -62 + c.squash * 5, 20, 54, '#8f2f3a', 8); box(ctx, 36, -62 + c.squash * 5, 20, 54, '#8f2f3a', 8); // arms
-    for (const x of [-48, 40]) box(ctx, x, -10, 10, 10, WOOD_D, 2);
+    box(ctx, -42, -112 + c.squash * 6, 84, 112, '#8f2f3a', 16); // back
+    ctx.strokeStyle = GOLD; ctx.lineWidth = 2; ctx.beginPath(); SD.rrect(ctx, -33, -104 + c.squash * 6, 66, 60, 12); ctx.stroke();
+    box(ctx, -50, -44 + c.squash * 8, 100, 34 - c.squash * 8, '#a63a45', 9); // seat cushion
+    for (const sx of [-1, 1]) box(ctx, sx * 48 - 10, -62 + c.squash * 5, 20, 54, '#8f2f3a', 8); // arms
+    for (const x of [-49, 39]) box(ctx, x, -10, 10, 10, WOOD_D, 2);
   }
   const WISH = {
     skates: (ctx) => { ctx.fillStyle = '#ffffff'; ctx.strokeStyle = INK; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(-8, -12); ctx.lineTo(0, -12); ctx.lineTo(1, -2); ctx.lineTo(12, 2); ctx.lineTo(12, 7); ctx.lineTo(-9, 7); ctx.closePath(); ctx.fill(); ctx.stroke(); line(ctx, [[-11, 11], [14, 11]], '#9fb3c8', 2.4); ctx.strokeStyle = RED; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(-3, -6); ctx.lineTo(2, -6); ctx.moveTo(-3, -2); ctx.lineTo(3, -2); ctx.stroke(); },

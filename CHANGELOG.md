@@ -3,6 +3,12 @@
 Each version's list becomes its release notes and is shown in the update prompt. Add "(critical)"
 after a version number to have installed copies update without asking.
 
+## 1.6.1
+- The Trebuchet now points out of the picture, and one very large penguin pops up to squeegee the glass, wiping the snow off stroke by stroke
+- The Christmas Card prints a real photo of the crew as they stood when the flash went
+- Carol singers sing with eyes open and beaks wide
+- Santa's hat sits on his head; his chair is centred on its rug
+
 ## 1.6.0
 - Eight new scenes: The Trebuchet (they find the glass), The Christmas Card, Santa's Grotto, The Countdown to Christmas, Santa's Workshop, Christmas Biscuits, Carols round the Tree, and Decorating the Town
 - The Big Ramp is rebuilt: no more waiting or walking over the mound, and the big ramp gets used. Off the kicker, out of the top of the picture, and straight down through the snow

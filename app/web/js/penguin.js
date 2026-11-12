@@ -472,7 +472,7 @@
         case 'boom': P.aF = -2.45; P.aB = -2.25; P.lean = -0.04; break;
         case 'present': P.aF = -1.25; P.aB = -1.35; P.beak = 0.3; eyes = 'happy'; break;
         // carols: head back, beak wide, eyes shut, swaying together (everyone shares the same beat)
-        case 'sing': { const bt = this.world.t * 2.2; P.lean = -0.16; P.roll += Math.sin(bt) * 0.07; P.beak = 0.75 + 0.25 * Math.sin(bt * 2 + this.id); P.aF = 0.5; P.aB = -0.5; P.bob = Math.max(0, Math.sin(bt * 2)) * 1.5; eyes = 'closed'; break; }
+        case 'sing': { const bt = this.world.t * 2.2; P.lean = -0.2; P.roll += Math.sin(bt) * 0.08; P.beak = 1.25 + 0.55 * Math.sin(bt * 2 + this.id * 1.7); P.aF = 0.5; P.aB = -0.35 - Math.max(0, Math.sin(bt + this.id)) * 0.5; P.bob = -Math.max(0, Math.sin(bt * 2)) * 2.5; eyes = Math.sin(bt * 0.5 + this.id) > 0.75 ? 'happy' : 'open'; break; }
         // the nativity and the long table
         case 'kneel': P.crouch = 0.75; P.fFx = 12; P.fBx = 14; P.fFy = -2; P.fBy = -2; P.aF = -1.0; P.aB = -1.1; P.lean = 0.08; break;
         case 'pray': P.aF = -1.32; P.aB = -1.42; P.lean = 0.06; eyes = 'closed'; P.beak = 0; break;
@@ -528,7 +528,7 @@
 
     // ---------- drawing ----------
     drawShadow(ctx) {
-      if (this.hidden || !this.visible) return;
+      if (this.hidden || !this.visible || this.noShadow) return;
       const w = this.world;
       const gy = w.surfaceY(this.x) + this.lane;
       const h = Math.max(0, gy - this.y);
@@ -571,22 +571,8 @@
         // On the belly. A penguin tobogganing isn't a standing penguin tipped over: the body lies
         // flat along the snow and the neck bends so the head rides up, looking where it's going.
         // So the figure is drawn in two parts about the neck: the body flat, the head lifted.
-        ctx.translate(0, 2 * p.prone * (this.air ? 0 : 1)); // the belly sinks into the snow a little
-        ctx.translate(0, -34); ctx.rotate(p.prone * 1.56 + p.pitch); ctx.translate(0, 34);
-        if (this._partOnly) this._drawBody(ctx, cr);
-        else {
-          const NY = -63 + cr, up = (1.36 + Math.sin(this.t * 3.1 + this.id) * 0.04) * p.prone;
-          // the body stretches out long behind the neck
-          ctx.save(); ctx.translate(0, NY); ctx.scale(1 - 0.2 * p.prone, 1 + 0.4 * p.prone); ctx.translate(0, -NY); ctx.beginPath(); ctx.rect(-300, NY, 600, 400); ctx.clip(); this._drawBody(ctx, cr); ctx.restore();
-          // the throat, opened by the bend
-          const kc = KCOL[this.kind] || KCOL.crew;
-          ctx.fillStyle = this.kind === 'pip' || this.darkFace ? kc.back : CREAM; ctx.strokeStyle = INK; ctx.lineWidth = 2.6;
-          ctx.beginPath(); ctx.moveTo(-8, NY); ctx.arc(-8, NY, 34, 0.1, -up - 0.1, true); ctx.closePath(); ctx.fill();
-          ctx.beginPath(); ctx.arc(-8, NY, 34, 0, -up, true); ctx.stroke();
-          // the neck bends at the back of the shoulders, so the whole head clears the snow
-          ctx.translate(-8, NY); ctx.rotate(-up); ctx.translate(8, -NY);
-          ctx.beginPath(); ctx.rect(-300, NY - 400, 600, 400.5); ctx.clip(); this._drawBody(ctx, cr);
-        }
+        ctx.translate(0, -34); ctx.rotate(p.prone * 1.5 + p.pitch); ctx.translate(0, 34);
+        this._drawBody(ctx, cr);
       } else this._drawBody(ctx, cr);
       ctx.restore();
       if (p.prone > 0.5 && !this._partOnly && !this.air) this._snowLip(ctx);
@@ -1141,11 +1127,18 @@
         : { captain: ['#3a404d', '#2a2f3a', '#ff8f2e'], pip: ['#575e6b', '#3a3f4a', '#2e333c'], rocco: ['#ff7a45', '#e3502a', '#c2401e'] }[this.kind] || ['#ffc46b', BEAK, BEAK_SH];
       ctx.closePath(); ctx.fillStyle = BC[2]; ctx.fill(); ctx.stroke();
       ctx.restore();
-      if (open > 0.3) {
+      // past fully open the top half lifts too and you can see right in: singing, shouting
+      const wide = Math.max(0, open - 0.9);
+      if (wide > 0) {
+        const a0 = -wide * 0.5 - 0.1, a1 = open * 0.5 + 0.12;
+        ctx.fillStyle = '#8e2433'; ctx.beginPath(); ctx.moveTo(1, -63); ctx.lineTo(1 + Math.cos(a0) * 12, -63 + Math.sin(a0) * 12); ctx.quadraticCurveTo(13, -62, 1 + Math.cos(a1) * 11, -62 + Math.sin(a1) * 11); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ff8fa3'; ctx.beginPath(); ctx.ellipse(5.5, -60.6 + open, 3.2, 1.6, 0.35, 0, TAU); ctx.fill();
+      } else if (open > 0.3) {
         ctx.fillStyle = '#b8323f';
         ctx.beginPath(); ctx.moveTo(2, -62.4); ctx.lineTo(10, -62 + open * 1.6); ctx.lineTo(2, -60.2 + open * 2.2); ctx.closePath(); ctx.fill();
       }
       // upper mandible
+      if (wide > 0) { ctx.translate(1, -63.5); ctx.rotate(-wide * 0.55); ctx.translate(-1, 63.5); }
       ctx.beginPath();
       const bl = this.kind === 'captain' ? 5 : this.kind === 'pip' ? -3 : 0; // captain's beak is longer, Pip's smaller
       const bt = this.kind === 'rocco' ? -1.2 : 0; // rocco's is chunkier
