@@ -1188,11 +1188,13 @@
           ctx.beginPath(); ctx.arc(2.0, -1.2, 1.35, 0, TAU); ctx.fill();
           ctx.beginPath(); ctx.arc(-0.2, 2.1, 0.6, 0, TAU); ctx.fill();
           if (this.kind === 'rocco') {
-            // Rocco is never surprised: a heavy lid over the top half, level and unbothered
+            // Rocco's surfer look: a relaxed lid across the top third, tipped down a touch toward
+            // the beak, so he's easy and sure of himself rather than startled (or sleepy)
+            const yo = -3.0, yi = -2.4, xo = outer * 6, xi = -outer * 6;
             ctx.save(); ctx.beginPath(); ctx.ellipse(0, -0.2, 5.4, 6.4, 0, 0, TAU); ctx.clip();
-            ctx.fillStyle = '#1d2029'; ctx.fillRect(-7, -8, 14, 7.4);
+            ctx.fillStyle = '#1d2029'; ctx.beginPath(); ctx.moveTo(xo, -9); ctx.lineTo(xi, -9); ctx.lineTo(xi, yi); ctx.lineTo(xo, yo); ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = '#eef2f8'; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(xo, yo); ctx.lineTo(xi, yi); ctx.stroke();
             ctx.restore();
-            ctx.strokeStyle = '#eef2f8'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-4.4, -0.9); ctx.quadraticCurveTo(0, -0.1, 4.4, -0.9); ctx.stroke();
           }
         } else {
           ctx.fillStyle = INK;
@@ -1232,6 +1234,8 @@
         ctx.fillStyle = '#b8323f';
         ctx.beginPath(); ctx.moveTo(2, -62.4); ctx.lineTo(10, -62 + open * 1.6); ctx.lineTo(2, -60.2 + open * 2.2); ctx.closePath(); ctx.fill();
       }
+      // Rocco's easy half-smile, tucked in behind the beak
+      if (this.kind === 'rocco' && open < 0.5) { ctx.save(); ctx.strokeStyle = '#eef2f8'; ctx.lineWidth = 1.5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(1.5, -60.6); ctx.quadraticCurveTo(-2.5, -59.6, -5, -62.6); ctx.stroke(); ctx.restore(); }
       // upper mandible
       if (wide > 0) { ctx.translate(1, -63.5); ctx.rotate(-wide * 0.55); ctx.translate(-1, 63.5); }
       ctx.beginPath();
