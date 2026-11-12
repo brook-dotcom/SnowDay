@@ -1187,6 +1187,13 @@
           ctx.fillStyle = '#ffffff';
           ctx.beginPath(); ctx.arc(2.0, -1.2, 1.35, 0, TAU); ctx.fill();
           ctx.beginPath(); ctx.arc(-0.2, 2.1, 0.6, 0, TAU); ctx.fill();
+          if (this.kind === 'rocco') {
+            // Rocco is never surprised: a heavy lid over the top half, level and unbothered
+            ctx.save(); ctx.beginPath(); ctx.ellipse(0, -0.2, 5.4, 6.4, 0, 0, TAU); ctx.clip();
+            ctx.fillStyle = '#1d2029'; ctx.fillRect(-7, -8, 14, 7.4);
+            ctx.restore();
+            ctx.strokeStyle = '#eef2f8'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-4.4, -0.9); ctx.quadraticCurveTo(0, -0.1, 4.4, -0.9); ctx.stroke();
+          }
         } else {
           ctx.fillStyle = INK;
           ctx.beginPath(); ctx.ellipse(0, 0, 4.1, 5.4, 0, 0, TAU); ctx.fill();
