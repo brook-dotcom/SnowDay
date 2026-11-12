@@ -1190,10 +1190,12 @@
           if (this.kind === 'rocco') {
             // Rocco's surfer look: a relaxed lid across the top third, tipped down a touch toward
             // the beak, so he's easy and sure of himself rather than startled (or sleepy)
-            const yo = -3.0, yi = -2.4, xo = outer * 6, xi = -outer * 6;
+            const xo = outer * 6, xi = -outer * 6;
             ctx.save(); ctx.beginPath(); ctx.ellipse(0, -0.2, 5.4, 6.4, 0, 0, TAU); ctx.clip();
-            ctx.fillStyle = '#1d2029'; ctx.beginPath(); ctx.moveTo(xo, -9); ctx.lineTo(xi, -9); ctx.lineTo(xi, yi); ctx.lineTo(xo, yo); ctx.closePath(); ctx.fill();
-            ctx.strokeStyle = '#eef2f8'; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(xo, yo); ctx.lineTo(xi, yi); ctx.stroke();
+            ctx.fillStyle = '#1d2029';
+            ctx.beginPath(); ctx.moveTo(xo, -9); ctx.lineTo(xi, -9); ctx.lineTo(xi, -2.6); ctx.quadraticCurveTo(0, -3.4, xo, -2.6); ctx.closePath(); ctx.fill(); // easy upper lid
+            ctx.beginPath(); ctx.moveTo(xo, 9); ctx.lineTo(xi, 9); ctx.lineTo(xi, 4.4); ctx.quadraticCurveTo(0, 2.2, xo, 4.4); ctx.closePath(); ctx.fill();    // cheek pushed up by the grin
+            ctx.strokeStyle = '#eef2f8'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(xi, -2.6); ctx.quadraticCurveTo(0, -3.4, xo, -2.6); ctx.stroke();
             ctx.restore();
           }
         } else {
@@ -1234,6 +1236,8 @@
         ctx.fillStyle = '#b8323f';
         ctx.beginPath(); ctx.moveTo(2, -62.4); ctx.lineTo(10, -62 + open * 1.6); ctx.lineTo(2, -60.2 + open * 2.2); ctx.closePath(); ctx.fill();
       }
+      // Rocco grins: the corner of the beak itself turns up
+      if (this.kind === 'rocco') { ctx.save(); ctx.lineCap = 'round'; ctx.strokeStyle = BC[2]; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.moveTo(3, -61.4); ctx.quadraticCurveTo(-1.2, -60.8, -3.4, -64.8); ctx.stroke(); ctx.restore(); }
       // upper mandible
       if (wide > 0) { ctx.translate(1, -63.5); ctx.rotate(-wide * 0.55); ctx.translate(-1, 63.5); }
       ctx.beginPath();
