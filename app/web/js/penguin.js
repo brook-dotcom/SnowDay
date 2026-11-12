@@ -55,6 +55,8 @@
   const CHUBBY_BODY = new Path2D('M0,-4 C31,-4 42,-17 41,-35 C40,-51 31,-61 27,-73 C25,-96 13,-106 0,-106 C-13,-106 -26,-97 -27,-80 C-29,-64 -41,-55 -42,-37 C-42,-17 -31,-4 0,-4 Z');
   const CHUBBY_FRONT = new Path2D('M6,-8 C27,-8 35,-21 34.5,-39 C34,-52 28,-60 25,-65 C28.5,-73 26.5,-86.5 16.5,-88 C11.5,-88.5 8,-85.5 6.5,-82 C5,-85.5 1.5,-88.5 -3.5,-88 C-12.5,-87 -16,-76 -12.5,-66.5 C-23,-57 -30,-47 -29,-33 C-28,-15 -12,-8 6,-8 Z');
   const PIP_MASK = new Path2D('M6,-50 C17,-50 26,-56 26.5,-64 C28.5,-72 26.5,-86.5 16.5,-88 C11.5,-88.5 8,-85.5 6.5,-82 C5,-85.5 1.5,-88.5 -3.5,-88 C-12.5,-87 -16,-76 -13.5,-66 C-11,-56 -3,-50 6,-50 Z');
+  const PRONE_BODY = new Path2D('M14,-61 C-5,-66 -30,-66 -46,-62 C-50,-66 -54,-70 -59,-69 C-63,-66 -62,-60 -63,-52 C-66,-38 -64,-22 -52,-12 C-38,-2 -18,0 -2,0 C22,0 40,-3 50,-11 C55,-15 55,-19 50,-22 C52,-40 40,-58 14,-61 Z');
+  const PRONE_BELLY = new Path2D('M-52,-9 C-32,-24 0,-27 26,-27 C36,-27 42,-33 50,-42 L80,-42 L80,10 L-52,10 Z');
   const KCOL = {
     crew: { back: BACK, hi: BACK_HI, dark: '#1e2740', rim: 'rgba(150,175,230,0.28)' },
     chubby: { back: BACK, hi: BACK_HI, dark: '#1e2740', rim: 'rgba(150,175,230,0.28)' },
@@ -567,10 +569,9 @@
       ctx.rotate((p.lean + p.roll) * dir + this.rot);
       ctx.scale(sx * s * this.K.kx / Math.sqrt(p.sq), s * p.sq * this.K.ky);
       const cr = p.crouch * 12;
-      if (p.prone > 0.001) {
-        // On the belly. A penguin tobogganing isn't a standing penguin tipped over: the body lies
-        // flat along the snow and the neck bends so the head rides up, looking where it's going.
-        // So the figure is drawn in two parts about the neck: the body flat, the head lifted.
+      if (p.prone > 0.5 && !this._partOnly) this._drawProne(ctx);
+      else if (p.prone > 0.001) {
+        // going down: tip forward, then the belly pose takes over
         ctx.translate(0, -34); ctx.rotate(p.prone * 1.5 + p.pitch); ctx.translate(0, 34);
         this._drawBody(ctx, cr);
       } else this._drawBody(ctx, cr);
@@ -583,30 +584,92 @@
       if (this.dizzy > 0) this._drawDizzy(ctx);
     }
 
+    // On the belly, tobogganing. Traced from a drawn pose of this same character: the body lies
+    // along the snow with the belly underneath, the tail up behind and the feet trailing; one
+    // flipper lies back along the side; the head is the standing head, upright, at the front, and
+    // the scarf wraps the neck where the two meet and streams out behind.
+    _drawProne(ctx) {
+      const p = this.p, K = this.kind, pal = this.pal, C = KCOL[K] || KCOL.crew, t = this.t;
+      const sp = Math.min(1, Math.abs(this.vx || 0) / 140), st = t * (6 + sp * 2) + this.id, kick = Math.sin(st) * (this.kick || 0);
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      // feet, soles up, trailing
+      ctx.save(); ctx.translate(-65, -24 - kick * 4); ctx.rotate(PI - 0.4 + kick * 0.25); this._foot(ctx, 0, 0, true); ctx.restore();
+      ctx.save(); ctx.translate(-63, -13 + kick * 4); ctx.rotate(PI - 0.12 - kick * 0.25); this._foot(ctx, 0, 0, false); ctx.restore();
+      // body
+      ctx.save();
+      if (K === 'chubby') ctx.scale(1.04, 1.15);
+      const body = PRONE_BODY;
+      const g = ctx.createRadialGradient(-14, -58, 4, -6, -34, 74);
+      g.addColorStop(0, C.hi); g.addColorStop(0.55, C.back); g.addColorStop(1, C.dark);
+      ctx.fillStyle = g; ctx.fill(body);
+      ctx.save(); ctx.clip(body);
+      const bg = ctx.createLinearGradient(0, -30, 0, 2);
+      if (K === 'pip') { bg.addColorStop(0, 'rgba(255,255,255,0.5)'); bg.addColorStop(1, 'rgba(255,255,255,0.2)'); }
+      else { bg.addColorStop(0, '#ffffff'); bg.addColorStop(0.6, CREAM); bg.addColorStop(1, CREAM_SH); }
+      ctx.fillStyle = bg; ctx.fill(PRONE_BELLY);
+      ctx.strokeStyle = C.rim; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-50, -58); ctx.bezierCurveTo(-30, -63, -8, -63, 8, -59); ctx.stroke();
+      ctx.restore();
+      ctx.strokeStyle = INK; ctx.lineWidth = 2.6; ctx.stroke(body);
+      ctx.restore();
+      // the flipper along the side, lifting a little with speed
+      ctx.save(); ctx.translate(10, -45); ctx.scale(1.2, 1.2); this._flipper(ctx, 0, 0, 1.38 + Math.max(0, Math.sin(st * 0.9)) * 0.3 * sp, false); ctx.restore();
+      // the head: everything above the neck, as it is standing up
+      ctx.save();
+      ctx.beginPath(); ctx.moveTo(-60, -260); ctx.lineTo(160, -260); ctx.lineTo(160, -54); ctx.lineTo(72, -54); ctx.bezierCurveTo(73, -37, 63, -24, 47, -21.5); ctx.lineTo(43, -23); ctx.lineTo(14, -60); ctx.lineTo(-60, -60); ctx.closePath(); ctx.clip();
+      ctx.translate(43, 29);
+      this._headOnly = true; this._drawBody(ctx, 0); this._headOnly = false;
+      ctx.restore();
+      // the cheek rounds under to the neck
+      ctx.strokeStyle = INK; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.moveTo(71.6, -55); ctx.bezierCurveTo(73.4, -37, 63, -24, 47, -21.5); ctx.stroke();
+      // neckwear over the join
+      const bare = K === 'specs' || K === 'captain' || K === 'stranger' || K === 'rocco';
+      if (bare) { ctx.strokeStyle = INK; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(27, -44); ctx.quadraticCurveTo(33, -31, 44, -22.5); ctx.stroke(); } // the fold of the neck
+      if (K === 'specs') { ctx.save(); ctx.translate(43, 29); this._bowtie(ctx); ctx.restore(); }
+      else if (K !== 'captain' && K !== 'stranger' && K !== 'rocco') {
+        const band = new Path2D('M5,-63 Q17,-34 42,-11 L53,-19 Q31,-40 18,-67 Z');
+        ctx.fillStyle = pal.scarf; ctx.fill(band);
+        ctx.save(); ctx.clip(band); ctx.fillStyle = pal.salt;
+        for (let k = 0; k < 6; k++) { const y = -62 + k * 10; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(70, y - 12); ctx.lineTo(70, y - 8); ctx.lineTo(0, y + 4); ctx.closePath(); ctx.fill(); }
+        ctx.restore();
+        ctx.strokeStyle = INK; ctx.lineWidth = 2.3; ctx.stroke(band);
+        ctx.save(); ctx.translate(13, -63); ctx.rotate(2.2 + Math.sin(t * 9 + this.id) * 0.12 * (0.4 + sp) - this.tail.x * 0.15);
+        const tail = new Path2D('M-5,0 L5,0 L6.5,24 L-4,25 Z');
+        ctx.fillStyle = pal.scarf; ctx.fill(tail);
+        ctx.save(); ctx.clip(tail); ctx.fillStyle = pal.salt; ctx.fillRect(-8, 8, 16, 4); ctx.fillRect(-8, 16, 16, 4); ctx.restore();
+        ctx.strokeStyle = INK; ctx.lineWidth = 2.1; ctx.stroke(tail);
+        ctx.lineWidth = 1.6; ctx.strokeStyle = pal.scarf; ctx.beginPath();
+        for (let k = 0; k < 4; k++) { const fx = -3.3 + k * 3; ctx.moveTo(fx, 25); ctx.lineTo(fx + 0.6, 30); }
+        ctx.stroke(); ctx.restore();
+        ctx.beginPath(); ctx.ellipse(13, -63, 5.5, 4.6, 0.3, 0, TAU); ctx.fillStyle = SD.shade(pal.scarf, -0.08); ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 2.1; ctx.stroke();
+      }
+    }
+
     _drawBody(ctx, cr) {
-      const p = this.p, pal = this.pal;
+      const p = this.p, pal = this.pal, HO = this._headOnly;
       ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       if (this._partOnly) {
         ctx.save(); ctx.translate(0, cr);
-        if (this._partOnly === 'F') this._flipper(ctx, -20, -58 + 22 * p.prone, p.aF, false); else this._flipper(ctx, 22, -58 + 22 * p.prone, p.aB, true);
+        if (this._partOnly === 'F') this._flipper(ctx, -20, -58, p.aF, false); else this._flipper(ctx, 22, -58, p.aB, true);
         ctx.restore();
         return;
       }
       const LW = 2.6;
       // back foot
-      this._foot(ctx, 9 + p.fBx, p.fBy, true);
+      if (!HO) this._foot(ctx, 9 + p.fBx, p.fBy, true);
       // back flipper (behind body)
       ctx.save(); ctx.translate(0, cr);
-      if (this.item && this.item.at === 'back') this._drawItem(ctx, this.item, 'F');
-      if (this.item2 && this.item2.at === 'back') this._drawItem(ctx, this.item2, 'B');
-      this._flipper(ctx, 22, -58 + 22 * p.prone, p.aB, true);
+      if (!HO) {
+        if (this.item && this.item.at === 'back') this._drawItem(ctx, this.item, 'F');
+        if (this.item2 && this.item2.at === 'back') this._drawItem(ctx, this.item2, 'B');
+        this._flipper(ctx, 22, -58, p.aB, true);
+      }
       if (pal.style === 'muffs') this._muff(ctx, 22, -80, true);
       if (pal.style === 'flaps') { ctx.save(); ctx.translate(0, -6); this._flap(ctx, 1); ctx.restore(); }
       if (this.kind === 'rocco') this._plumes(ctx, true);
       // scarf tail (behind if blown back)
       ctx.restore();
       // costume parts that hang behind the body (wings, a cloak's back)
-      if (this.costumeBack) { ctx.save(); ctx.translate(0, cr); this.costumeBack(ctx, this); ctx.restore(); }
+      if (this.costumeBack && !HO) { ctx.save(); ctx.translate(0, cr); this.costumeBack(ctx, this); ctx.restore(); }
 
       ctx.save();
       ctx.translate(0, cr);
@@ -616,7 +679,8 @@
       const K = this.kind;
       const body = K === 'chubby' ? CHUBBY_BODY : BODY_PATH;
       const C = KCOL[K] || KCOL.crew;
-      const g = ctx.createRadialGradient(-12, -78, 4, -4, -50, 62);
+      // (the belly pose shades the head with the body's own gradient, so the two join without a seam)
+      const g = HO ? ctx.createRadialGradient(-57, -87, 4, -49, -63, 74) : ctx.createRadialGradient(-12, -78, 4, -4, -50, 62);
       g.addColorStop(0, C.hi); g.addColorStop(0.55, C.back); g.addColorStop(1, C.dark);
       ctx.fillStyle = g; ctx.fill(body);
       ctx.save();
@@ -662,7 +726,8 @@
         ctx.beginPath(); ctx.moveTo(-12, -64); ctx.quadraticCurveTo(6, -51, 25.5, -64); ctx.stroke();
       }
       // neckwear
-      if (K === 'captain') this._whistle(ctx);
+      if (HO) { /* the belly pose draws its own */ }
+      else if (K === 'captain') this._whistle(ctx);
       else if (K === 'stranger') { if (this.rosette) this._rosette(ctx); }
       else if (K === 'specs') this._bowtie(ctx);
       else if (K === 'chubby') { ctx.save(); ctx.translate(0, -50); ctx.scale(1.13, 1); ctx.translate(0, 50); this._scarf(ctx); ctx.restore(); }
@@ -682,13 +747,14 @@
       if (this.snowCap > 0.05) this._snowDrift(ctx);
       ctx.restore();
 
+      if (HO) return;
       // front foot
       this._foot(ctx, -7 + p.fFx, p.fFy, false);
       if (this.gear) SD.drawGear(ctx, this);
       // front flipper + held items
       ctx.save(); ctx.translate(0, cr);
       if (this.item && this.item.at !== 'up' && this.item.at !== 'back') this._drawItem(ctx, this.item, 'F');
-      this._flipper(ctx, -20, -58 + 22 * p.prone, p.aF, false);
+      this._flipper(ctx, -20, -58, p.aF, false);
       if (this.item && this.item.at === 'up') {
         // carried things rest on whatever is on top of the head
         ctx.translate(0, 131 + this.headTopLocal()); // shorter heads: the load sits lower, right on top
@@ -1028,7 +1094,7 @@
       ctx.save();
       ctx.globalAlpha = this.alpha;
       ctx.translate(this.x, gy); ctx.scale(f * s, s);
-      const front = 44, back = -66, hf = 5 + v * 4, hb = 4.5;
+      const front = 46, back = -66, hf = 5 + v * 4, hb = 4.5;
       const edge = () => {
         ctx.moveTo(back, 1);
         ctx.bezierCurveTo(back + 18, -hb, front - 50, -hb - 1, front - 18, -hf * 0.75);
