@@ -1221,7 +1221,10 @@
       // lower mandible (hinges open)
       ctx.save();
       ctx.translate(2, -62.4); ctx.rotate(open * 0.5);
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(6, 0.4, 11.5, -0.2); ctx.quadraticCurveTo(6, 4.2, 0, 2.8);
+      const grin = this.kind === 'rocco'; // his beak bends: the line of the mouth dips and comes up at both ends
+      ctx.beginPath();
+      if (grin) { ctx.moveTo(-1.6, -1.6); ctx.quadraticCurveTo(6, 2.6, 12.5, -1.4); ctx.quadraticCurveTo(6.5, 6, -0.6, 2.6); }
+      else { ctx.moveTo(0, 0); ctx.quadraticCurveTo(6, 0.4, 11.5, -0.2); ctx.quadraticCurveTo(6, 4.2, 0, 2.8); }
       const BC = this.kind === 'stranger' ? (this.look === 'gentoo' ? ['#ff8a4a', '#e85a2a', '#c94a1e'] : ['#3a404d', '#2a2f3a', '#2a2f3a'])
         : { captain: ['#3a404d', '#2a2f3a', '#ff8f2e'], pip: ['#575e6b', '#3a3f4a', '#2e333c'], rocco: ['#ff7a45', '#e3502a', '#c2401e'] }[this.kind] || ['#ffc46b', BEAK, BEAK_SH];
       ctx.closePath(); ctx.fillStyle = BC[2]; ctx.fill(); ctx.stroke();
@@ -1236,17 +1239,21 @@
         ctx.fillStyle = '#b8323f';
         ctx.beginPath(); ctx.moveTo(2, -62.4); ctx.lineTo(10, -62 + open * 1.6); ctx.lineTo(2, -60.2 + open * 2.2); ctx.closePath(); ctx.fill();
       }
-      // Rocco grins: the corner of the beak itself turns up
-      if (this.kind === 'rocco') { ctx.save(); ctx.lineCap = 'round'; ctx.strokeStyle = BC[2]; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.moveTo(3, -61.4); ctx.quadraticCurveTo(-1.2, -60.8, -3.4, -64.8); ctx.stroke(); ctx.restore(); }
       // upper mandible
       if (wide > 0) { ctx.translate(1, -63.5); ctx.rotate(-wide * 0.55); ctx.translate(-1, 63.5); }
       ctx.beginPath();
       const bl = this.kind === 'captain' ? 5 : this.kind === 'pip' ? -3 : 0; // captain's beak is longer, Pip's smaller
       const bt = this.kind === 'rocco' ? -1.2 : 0; // rocco's is chunkier
       ctx.moveTo(0.5, -66.6 + bt);
-      ctx.quadraticCurveTo(9 + bl * 0.5, -70 + bt, 17 + bl, -63.2);
-      ctx.quadraticCurveTo(9, -60.6, 1.2, -62.2);
-      ctx.quadraticCurveTo(-0.6, -64.4, 0.5, -66.6);
+      if (grin) {
+        ctx.quadraticCurveTo(9, -70 + bt, 17, -64.4);
+        ctx.quadraticCurveTo(8.5, -58.4, 0.2, -64);
+        ctx.quadraticCurveTo(-0.6, -65.6, 0.5, -66.6 + bt);
+      } else {
+        ctx.quadraticCurveTo(9 + bl * 0.5, -70 + bt, 17 + bl, -63.2);
+        ctx.quadraticCurveTo(9, -60.6, 1.2, -62.2);
+        ctx.quadraticCurveTo(-0.6, -64.4, 0.5, -66.6);
+      }
       ctx.closePath();
       const g = ctx.createLinearGradient(0, -69, 0, -61);
       g.addColorStop(0, BC[0]); g.addColorStop(1, BC[1]);
