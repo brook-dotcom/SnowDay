@@ -55,6 +55,11 @@
   const CHUBBY_BODY = new Path2D('M0,-4 C31,-4 42,-17 41,-35 C40,-51 31,-61 27,-73 C25,-96 13,-106 0,-106 C-13,-106 -26,-97 -27,-80 C-29,-64 -41,-55 -42,-37 C-42,-17 -31,-4 0,-4 Z');
   const CHUBBY_FRONT = new Path2D('M6,-8 C27,-8 35,-21 34.5,-39 C34,-52 28,-60 25,-65 C28.5,-73 26.5,-86.5 16.5,-88 C11.5,-88.5 8,-85.5 6.5,-82 C5,-85.5 1.5,-88.5 -3.5,-88 C-12.5,-87 -16,-76 -12.5,-66.5 C-23,-57 -30,-47 -29,-33 C-28,-15 -12,-8 6,-8 Z');
   const PIP_MASK = new Path2D('M6,-50 C17,-50 26,-56 26.5,-64 C28.5,-72 26.5,-86.5 16.5,-88 C11.5,-88.5 8,-85.5 6.5,-82 C5,-85.5 1.5,-88.5 -3.5,-88 C-12.5,-87 -16,-76 -13.5,-66 C-11,-56 -3,-50 6,-50 Z');
+  // the belly-slide figure: one outline, tail to beak (traced from a drawn pose of the character)
+  const PRONE_FIG = new Path2D('M-58,-69 C-54,-67 -52,-63 -47,-62 C-30,-66 -6,-66 13,-60 C15,-72 27,-79 45,-78 C63,-77 76,-64 76,-47 C76,-34 69,-24 57,-18 C44,-6 22,0 -2,0 C-22,0 -42,-3 -54,-13 C-64,-22 -66,-38 -63,-52 C-62,-60 -63,-66 -58,-69 Z');
+  const PRONE_FRONT = new Path2D('M-52,-9 C-32,-22 0,-25 22,-23 C36,-22 44,-32 48,-44 C51,-56 55,-66 66,-67 L90,-67 L90,10 L-60,10 Z');
+  const PRONE_BELLY = new Path2D('M-52,-9 C-32,-22 0,-25 22,-23 C34,-22 42,-26 50,-30 L90,-26 L90,10 L-60,10 Z');
+  const PRONE_FLIPPER = new Path2D('M15,-47 C4,-57 -15,-57 -27,-51 C-32,-43 -25,-31 -11,-29 C0,-28 11,-33 15,-47 Z');
   const KCOL = {
     crew: { back: BACK, hi: BACK_HI, dark: '#1e2740', rim: 'rgba(150,175,230,0.28)' },
     chubby: { back: BACK, hi: BACK_HI, dark: '#1e2740', rim: 'rgba(150,175,230,0.28)' },
@@ -322,7 +327,7 @@
           P.aF = 0.5 + Math.max(0, Math.sin(st * 0.9)) * 0.22 * sp; P.aB = -0.2;
           P.fFx = -2 + Math.sin(st) * 5 * kick; P.fBx = 2 - Math.sin(st) * 5 * kick;
           P.fFy = -3 - Math.max(0, Math.sin(st)) * 8 * kick; P.fBy = -3 - Math.max(0, -Math.sin(st)) * 8 * kick;
-          P.sq = 1; P.bob = 0; eyes = sp > 0.5 ? 'happy' : eyes;
+          P.sq = 1; P.bob = 0; // eyes open: looking where it's going
           break;
         }
         case 'scrabble':
@@ -472,7 +477,7 @@
         case 'boom': P.aF = -2.45; P.aB = -2.25; P.lean = -0.04; break;
         case 'present': P.aF = -1.25; P.aB = -1.35; P.beak = 0.3; eyes = 'happy'; break;
         // carols: head back, beak wide, eyes shut, swaying together (everyone shares the same beat)
-        case 'sing': { const bt = this.world.t * 2.2; P.lean = -0.16; P.roll += Math.sin(bt) * 0.07; P.beak = 0.75 + 0.25 * Math.sin(bt * 2 + this.id); P.aF = 0.5; P.aB = -0.5; P.bob = Math.max(0, Math.sin(bt * 2)) * 1.5; eyes = 'closed'; break; }
+        case 'sing': { const bt = this.world.t * 2.2; P.lean = -0.2; P.roll += Math.sin(bt) * 0.08; P.beak = 1.25 + 0.55 * Math.sin(bt * 2 + this.id * 1.7); P.aF = 0.5; P.aB = -0.35 - Math.max(0, Math.sin(bt + this.id)) * 0.5; P.bob = -Math.max(0, Math.sin(bt * 2)) * 2.5; eyes = Math.sin(bt * 0.5 + this.id) > 0.75 ? 'happy' : 'open'; break; }
         // the nativity and the long table
         case 'kneel': P.crouch = 0.75; P.fFx = 12; P.fBx = 14; P.fFy = -2; P.fBy = -2; P.aF = -1.0; P.aB = -1.1; P.lean = 0.08; break;
         case 'pray': P.aF = -1.32; P.aB = -1.42; P.lean = 0.06; eyes = 'closed'; P.beak = 0; break;
@@ -528,7 +533,7 @@
 
     // ---------- drawing ----------
     drawShadow(ctx) {
-      if (this.hidden || !this.visible) return;
+      if (this.hidden || !this.visible || this.noShadow) return;
       const w = this.world;
       const gy = w.surfaceY(this.x) + this.lane;
       const h = Math.max(0, gy - this.y);
@@ -567,26 +572,11 @@
       ctx.rotate((p.lean + p.roll) * dir + this.rot);
       ctx.scale(sx * s * this.K.kx / Math.sqrt(p.sq), s * p.sq * this.K.ky);
       const cr = p.crouch * 12;
-      if (p.prone > 0.001) {
-        // On the belly. A penguin tobogganing isn't a standing penguin tipped over: the body lies
-        // flat along the snow and the neck bends so the head rides up, looking where it's going.
-        // So the figure is drawn in two parts about the neck: the body flat, the head lifted.
-        ctx.translate(0, 2 * p.prone * (this.air ? 0 : 1)); // the belly sinks into the snow a little
-        ctx.translate(0, -34); ctx.rotate(p.prone * 1.56 + p.pitch); ctx.translate(0, 34);
-        if (this._partOnly) this._drawBody(ctx, cr);
-        else {
-          const NY = -63 + cr, up = (1.36 + Math.sin(this.t * 3.1 + this.id) * 0.04) * p.prone;
-          // the body stretches out long behind the neck
-          ctx.save(); ctx.translate(0, NY); ctx.scale(1 - 0.2 * p.prone, 1 + 0.4 * p.prone); ctx.translate(0, -NY); ctx.beginPath(); ctx.rect(-300, NY, 600, 400); ctx.clip(); this._drawBody(ctx, cr); ctx.restore();
-          // the throat, opened by the bend
-          const kc = KCOL[this.kind] || KCOL.crew;
-          ctx.fillStyle = this.kind === 'pip' || this.darkFace ? kc.back : CREAM; ctx.strokeStyle = INK; ctx.lineWidth = 2.6;
-          ctx.beginPath(); ctx.moveTo(-8, NY); ctx.arc(-8, NY, 34, 0.1, -up - 0.1, true); ctx.closePath(); ctx.fill();
-          ctx.beginPath(); ctx.arc(-8, NY, 34, 0, -up, true); ctx.stroke();
-          // the neck bends at the back of the shoulders, so the whole head clears the snow
-          ctx.translate(-8, NY); ctx.rotate(-up); ctx.translate(8, -NY);
-          ctx.beginPath(); ctx.rect(-300, NY - 400, 600, 400.5); ctx.clip(); this._drawBody(ctx, cr);
-        }
+      if (p.prone > 0.5 && !this._partOnly) this._drawProne(ctx);
+      else if (p.prone > 0.001) {
+        // going down or getting up: tip forward; the belly figure takes over from there
+        ctx.translate(0, -34); ctx.rotate(p.prone * 1.5 + p.pitch); ctx.translate(0, 34);
+        this._drawBody(ctx, cr);
       } else this._drawBody(ctx, cr);
       ctx.restore();
       if (p.prone > 0.5 && !this._partOnly && !this.air) this._snowLip(ctx);
@@ -595,6 +585,89 @@
       // bubble / dizzy overlay (unrotated)
       if (this.bubble) this._drawBubble(ctx);
       if (this.dizzy > 0) this._drawDizzy(ctx);
+    }
+
+    // On the belly, tobogganing: its own drawing, not the standing one moved about. Side on, one
+    // outline from tail to beak; belly on the snow, tail up, feet trailing, a flipper back along the
+    // side, head up and looking where it's going, scarf streaming.
+    _drawProne(ctx) {
+      const p = this.p, K = this.kind, pal = this.pal, C = KCOL[K] || KCOL.crew, t = this.t;
+      const sp = Math.min(1, Math.abs(this.vx || 0) / 140), st = t * (6 + sp * 2) + this.id, kick = Math.sin(st) * (this.kick || 0);
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.rotate(p.pitch);
+      // feet, soles up, trailing
+      ctx.save(); ctx.translate(-65, -24 - kick * 4); ctx.rotate(PI - 0.4 + kick * 0.25); this._foot(ctx, 0, 0, true); ctx.restore();
+      ctx.save(); ctx.translate(-63, -13 + kick * 4); ctx.rotate(PI - 0.12 - kick * 0.25); this._foot(ctx, 0, 0, false); ctx.restore();
+      // things behind the head
+      if (K === 'chubby') ctx.scale(1.05, 1.1);
+      // the figure
+      const g = ctx.createRadialGradient(-10, -60, 4, 0, -36, 80);
+      g.addColorStop(0, C.hi); g.addColorStop(0.55, C.back); g.addColorStop(1, C.dark);
+      ctx.fillStyle = g; ctx.fill(PRONE_FIG);
+      ctx.save(); ctx.clip(PRONE_FIG);
+      if (K === 'pip') {
+        ctx.fillStyle = '#c9d0d8'; ctx.fill(PRONE_BELLY);
+        ctx.fillStyle = '#1f232b'; ctx.beginPath(); ctx.moveTo(8, -90); ctx.lineTo(90, -90); ctx.lineTo(90, -28); ctx.quadraticCurveTo(50, -14, 30, -34); ctx.quadraticCurveTo(16, -48, 8, -62); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#f4f7fa'; ctx.beginPath(); ctx.ellipse(64, -46, 15, 19, 0.15, 0, TAU); ctx.fill();
+      } else {
+        const bg = ctx.createLinearGradient(0, -40, 0, 2);
+        bg.addColorStop(0, '#ffffff'); bg.addColorStop(0.55, CREAM); bg.addColorStop(1, CREAM_SH);
+        ctx.fillStyle = bg; ctx.fill(this.darkFace ? PRONE_BELLY : PRONE_FRONT);
+        if (K === 'captain') { const gg = ctx.createRadialGradient(54, -30, 1, 54, -30, 15); gg.addColorStop(0, 'rgba(255,190,90,0.8)'); gg.addColorStop(1, 'rgba(255,214,140,0)'); ctx.fillStyle = gg; ctx.fill(PRONE_FRONT); }
+      }
+      ctx.strokeStyle = C.rim; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-50, -58); ctx.bezierCurveTo(-30, -63, -8, -63, 8, -59); ctx.stroke();
+      ctx.restore();
+      ctx.strokeStyle = INK; ctx.lineWidth = 2.6; ctx.stroke(PRONE_FIG);
+      // flipper along the side, lifting a little with speed
+      ctx.save(); ctx.translate(14, -45); ctx.rotate(Math.max(0, Math.sin(st * 0.9)) * 0.22 * sp); ctx.translate(-14, 45);
+      ctx.fillStyle = K === 'pip' ? '#8f98a4' : BACK; ctx.fill(PRONE_FLIPPER);
+      ctx.strokeStyle = 'rgba(140,165,215,0.3)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(6, -49); ctx.bezierCurveTo(-4, -54, -14, -54, -22, -50); ctx.stroke();
+      ctx.strokeStyle = INK; ctx.lineWidth = 2.5; ctx.stroke(PRONE_FLIPPER);
+      ctx.restore();
+      // face, in profile: cheek, the one eye we can see, the beak out in front
+      ctx.fillStyle = K === 'chubby' || K === 'holly' ? 'rgba(255,118,140,0.5)' : K === 'rocco' ? 'rgba(255,135,165,0.26)' : 'rgba(255,128,150,0.38)';
+      ctx.beginPath(); ctx.ellipse(63, -37, 4.6, 3, 0, 0, TAU); ctx.fill();
+      this._eyes(ctx, [63, -50]);
+      ctx.save(); ctx.translate(69.5, 19.5); this._beak(ctx, p.beak); ctx.restore();
+      if (K === 'specs') {
+        ctx.fillStyle = 'rgba(205,232,255,0.28)'; ctx.beginPath(); ctx.arc(63, -50, 8.2, 0, TAU); ctx.fill();
+        ctx.strokeStyle = '#3a2416'; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.arc(63, -50, 8.2, 0, TAU); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(55, -51); ctx.lineTo(30, -56); ctx.stroke();
+      }
+      // neckwear
+      if (K === 'specs') { ctx.save(); ctx.translate(55, -19); ctx.rotate(-0.35); ctx.translate(-5, 51); this._bowtie(ctx); ctx.restore(); }
+      else if (K !== 'captain' && K !== 'stranger' && K !== 'rocco') {
+        const band = new Path2D('M9,-60 Q20,-34 44,-11 L55,-19 Q33,-38 21,-63 Z');
+        ctx.fillStyle = pal.scarf; ctx.fill(band);
+        ctx.save(); ctx.clip(band); ctx.fillStyle = pal.salt;
+        for (let k = 0; k < 6; k++) { const y = -60 + k * 10; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(70, y - 12); ctx.lineTo(70, y - 8); ctx.lineTo(0, y + 4); ctx.closePath(); ctx.fill(); }
+        ctx.restore();
+        ctx.strokeStyle = INK; ctx.lineWidth = 2.3; ctx.stroke(band);
+        ctx.save(); ctx.translate(15, -60); ctx.rotate(2.2 + Math.sin(t * 9 + this.id) * 0.12 * (0.4 + sp) - this.tail.x * 0.15);
+        const tail = new Path2D('M-5,0 L5,0 L6.5,24 L-4,25 Z');
+        ctx.fillStyle = pal.scarf; ctx.fill(tail);
+        ctx.save(); ctx.clip(tail); ctx.fillStyle = pal.salt; ctx.fillRect(-8, 8, 16, 4); ctx.fillRect(-8, 16, 16, 4); ctx.restore();
+        ctx.strokeStyle = INK; ctx.lineWidth = 2.1; ctx.stroke(tail);
+        ctx.lineWidth = 1.6; ctx.strokeStyle = pal.scarf; ctx.beginPath();
+        for (let k = 0; k < 4; k++) { const fx = -3.3 + k * 3; ctx.moveTo(fx, 25); ctx.lineTo(fx + 0.6, 30); }
+        ctx.stroke(); ctx.restore();
+        ctx.beginPath(); ctx.ellipse(15, -60, 5.5, 4.6, 0.3, 0, TAU); ctx.fillStyle = SD.shade(pal.scarf, -0.08); ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 2.1; ctx.stroke();
+      }
+      // headwear, sitting on this head (a little back, as the head is up)
+      ctx.save(); ctx.translate(45, -47); ctx.rotate(-0.16); ctx.translate(-1, 47 + 26 - this.hatLift.x);
+      if (this.hatOff && (K === 'crew' || K === 'chubby' || K === 'captain' || K === 'holly')) { /* blown away */ }
+      else if (K === 'captain') this._captainCap(ctx);
+      else if (K === 'rocco') { ctx.translate(-2, -4); this._crest(ctx); ctx.translate(3, -2); this._plumes(ctx, false); }
+      else if (K === 'pip') this._tuft(ctx);
+      else if (K === 'specs') this._cowlick(ctx);
+      else if (K === 'stranger') this._fancyHat(ctx);
+      else if (pal.style === 'muffs') {
+        ctx.strokeStyle = INK; ctx.lineWidth = 6.5; ctx.beginPath(); ctx.moveTo(-6, -76); ctx.bezierCurveTo(-8, -100, 4, -110, 14, -106); ctx.stroke();
+        ctx.strokeStyle = pal.alt; ctx.lineWidth = 3.6; ctx.stroke();
+        this._muff(ctx, -6, -74, false);
+      } else this._hat(ctx);
+      if (this.costume) this.costume(ctx, this);
+      ctx.restore();
     }
 
     _drawBody(ctx, cr) {
@@ -1042,7 +1115,7 @@
       ctx.save();
       ctx.globalAlpha = this.alpha;
       ctx.translate(this.x, gy); ctx.scale(f * s, s);
-      const front = 44, back = -66, hf = 5 + v * 4, hb = 4.5;
+      const front = 46, back = -66, hf = 5 + v * 4, hb = 4.5;
       const edge = () => {
         ctx.moveTo(back, 1);
         ctx.bezierCurveTo(back + 18, -hb, front - 50, -hb - 1, front - 18, -hf * 0.75);
@@ -1075,7 +1148,7 @@
       ctx.restore();
     }
 
-    _eyes(ctx) {
+    _eyes(ctx, one) { // one: [x, y] draws just the near eye there (profile)
       const e = this.eyes;
       const lineCol = this.darkFace ? '#eef2f8' : INK; // closed eyes must show on a dark face
       const eye = (x, y, sc, outer = 1) => {
@@ -1114,6 +1187,17 @@
           ctx.fillStyle = '#ffffff';
           ctx.beginPath(); ctx.arc(2.0, -1.2, 1.35, 0, TAU); ctx.fill();
           ctx.beginPath(); ctx.arc(-0.2, 2.1, 0.6, 0, TAU); ctx.fill();
+          if (this.kind === 'rocco') {
+            // Rocco's surfer look: a relaxed lid across the top third, tipped down a touch toward
+            // the beak, so he's easy and sure of himself rather than startled (or sleepy)
+            const xo = outer * 6, xi = -outer * 6;
+            ctx.save(); ctx.beginPath(); ctx.ellipse(0, -0.2, 5.4, 6.4, 0, 0, TAU); ctx.clip();
+            ctx.fillStyle = '#1d2029';
+            ctx.beginPath(); ctx.moveTo(xo, -9); ctx.lineTo(xi, -9); ctx.lineTo(xi, -2.6); ctx.quadraticCurveTo(0, -3.4, xo, -2.6); ctx.closePath(); ctx.fill(); // easy upper lid
+            ctx.beginPath(); ctx.moveTo(xo, 9); ctx.lineTo(xi, 9); ctx.lineTo(xi, 4.4); ctx.quadraticCurveTo(0, 2.2, xo, 4.4); ctx.closePath(); ctx.fill();    // cheek pushed up by the grin
+            ctx.strokeStyle = '#eef2f8'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(xi, -2.6); ctx.quadraticCurveTo(0, -3.4, xo, -2.6); ctx.stroke();
+            ctx.restore();
+          }
         } else {
           ctx.fillStyle = INK;
           ctx.beginPath(); ctx.ellipse(0, 0, 4.1, 5.4, 0, 0, TAU); ctx.fill();
@@ -1126,6 +1210,7 @@
         ctx.restore();
       };
       const es = this.kind === 'pip' ? 1.22 : this.kind === 'specs' ? 1.12 : 1;
+      if (one) { eye(one[0], one[1], es * 1.05, 1); return; }
       eye(-3, -73, 0.86 * es, -1);
       eye(16.5, -73, es, 1);
     }
@@ -1136,23 +1221,39 @@
       // lower mandible (hinges open)
       ctx.save();
       ctx.translate(2, -62.4); ctx.rotate(open * 0.5);
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(6, 0.4, 11.5, -0.2); ctx.quadraticCurveTo(6, 4.2, 0, 2.8);
+      const grin = this.kind === 'rocco'; // his beak bends: the line of the mouth dips and comes up at both ends
+      ctx.beginPath();
+      if (grin) { ctx.moveTo(-1.6, -1.6); ctx.quadraticCurveTo(6, 2.6, 12.5, -1.4); ctx.quadraticCurveTo(6.5, 6, -0.6, 2.6); }
+      else { ctx.moveTo(0, 0); ctx.quadraticCurveTo(6, 0.4, 11.5, -0.2); ctx.quadraticCurveTo(6, 4.2, 0, 2.8); }
       const BC = this.kind === 'stranger' ? (this.look === 'gentoo' ? ['#ff8a4a', '#e85a2a', '#c94a1e'] : ['#3a404d', '#2a2f3a', '#2a2f3a'])
         : { captain: ['#3a404d', '#2a2f3a', '#ff8f2e'], pip: ['#575e6b', '#3a3f4a', '#2e333c'], rocco: ['#ff7a45', '#e3502a', '#c2401e'] }[this.kind] || ['#ffc46b', BEAK, BEAK_SH];
       ctx.closePath(); ctx.fillStyle = BC[2]; ctx.fill(); ctx.stroke();
       ctx.restore();
-      if (open > 0.3) {
+      // past fully open the top half lifts too and you can see right in: singing, shouting
+      const wide = Math.max(0, open - 0.9);
+      if (wide > 0) {
+        const a0 = -wide * 0.5 - 0.1, a1 = open * 0.5 + 0.12;
+        ctx.fillStyle = '#8e2433'; ctx.beginPath(); ctx.moveTo(1, -63); ctx.lineTo(1 + Math.cos(a0) * 12, -63 + Math.sin(a0) * 12); ctx.quadraticCurveTo(13, -62, 1 + Math.cos(a1) * 11, -62 + Math.sin(a1) * 11); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ff8fa3'; ctx.beginPath(); ctx.ellipse(5.5, -60.6 + open, 3.2, 1.6, 0.35, 0, TAU); ctx.fill();
+      } else if (open > 0.3) {
         ctx.fillStyle = '#b8323f';
         ctx.beginPath(); ctx.moveTo(2, -62.4); ctx.lineTo(10, -62 + open * 1.6); ctx.lineTo(2, -60.2 + open * 2.2); ctx.closePath(); ctx.fill();
       }
       // upper mandible
+      if (wide > 0) { ctx.translate(1, -63.5); ctx.rotate(-wide * 0.55); ctx.translate(-1, 63.5); }
       ctx.beginPath();
       const bl = this.kind === 'captain' ? 5 : this.kind === 'pip' ? -3 : 0; // captain's beak is longer, Pip's smaller
       const bt = this.kind === 'rocco' ? -1.2 : 0; // rocco's is chunkier
       ctx.moveTo(0.5, -66.6 + bt);
-      ctx.quadraticCurveTo(9 + bl * 0.5, -70 + bt, 17 + bl, -63.2);
-      ctx.quadraticCurveTo(9, -60.6, 1.2, -62.2);
-      ctx.quadraticCurveTo(-0.6, -64.4, 0.5, -66.6);
+      if (grin) {
+        ctx.quadraticCurveTo(9, -70 + bt, 17, -64.4);
+        ctx.quadraticCurveTo(8.5, -58.4, 0.2, -64);
+        ctx.quadraticCurveTo(-0.6, -65.6, 0.5, -66.6 + bt);
+      } else {
+        ctx.quadraticCurveTo(9 + bl * 0.5, -70 + bt, 17 + bl, -63.2);
+        ctx.quadraticCurveTo(9, -60.6, 1.2, -62.2);
+        ctx.quadraticCurveTo(-0.6, -64.4, 0.5, -66.6);
+      }
       ctx.closePath();
       const g = ctx.createLinearGradient(0, -69, 0, -61);
       g.addColorStop(0, BC[0]); g.addColorStop(1, BC[1]);
